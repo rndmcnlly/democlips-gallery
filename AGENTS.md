@@ -147,6 +147,16 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 `.dev.vars` overrides `GOOGLE_REDIRECT_URI` to localhost for local dev.
 The value in `wrangler.jsonc` is the production URL — do not change it.
 
+## Commit Messages
+
+- First line: short imperative summary of the change (~50 chars).
+- Blank line, then a body explaining **why** the change was made and any
+  key design decisions. Use a short paragraph or bullet points. Focus on
+  motivation, constraints, and trade-offs — not a line-by-line recap of
+  the diff. A reader should understand the intent without opening the code.
+- Before writing a commit message, run `git log` to read recent messages
+  for style and context. The history is short — use it.
+
 ## Common Tasks
 
 **Add a new API route**: Add to the "API Routes" section. Use `requireAuth`
