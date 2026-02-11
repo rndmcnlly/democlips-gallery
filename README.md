@@ -70,6 +70,10 @@ npm run dev
 
 Open <http://localhost:8787>. Sign in with your @ucsc.edu Google account.
 
+A test video (`test-clip.mp4` — 5-second ffmpeg test pattern) is included in
+the repo for quick upload testing. Navigate to any gallery URL (e.g.
+`localhost:8787/12345/1`), click "Upload a clip", and use this file.
+
 ---
 
 ## Local vs. Production: What Talks to What
