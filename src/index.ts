@@ -45,6 +45,7 @@ type VideoRow = {
   assignment_id: string;
   title: string;
   description: string;
+  url: string;
   duration: number | null;
   thumbnail_pct: number;
   created_at: string;
@@ -273,8 +274,9 @@ function fmtDate(iso: string): string {
 }
 
 function videoCard(v: VideoRow, streamDomain: string, currentUserId?: string, moderator = false): string {
+  const thumbAlt = v.title || v.user_name;
   const thumbImg = v.duration
-    ? `<img src="https://customer-${streamDomain}.cloudflarestream.com/${v.id}/thumbnails/thumbnail.jpg?height=270" alt="${esc(v.title)}" loading="lazy">`
+    ? `<img src="https://customer-${streamDomain}.cloudflarestream.com/${v.id}/thumbnails/thumbnail.jpg?height=270" alt="${esc(thumbAlt)}" loading="lazy">`
     : `<span class="processing">Processing...</span>`;
   const badge = v.duration
     ? `<span class="duration-badge">${fmtDuration(v.duration)}</span>`
@@ -282,6 +284,9 @@ function videoCard(v: VideoRow, streamDomain: string, currentUserId?: string, mo
   const isOwner = currentUserId && v.user_id === currentUserId;
   const deleteBtn = isOwner
     ? `<button class="delete-btn" onclick="deleteVideo(event, '${esc(v.id)}')" title="Delete your clip">delete</button>`
+    : "";
+  const editBtn = isOwner
+    ? `<button class="delete-btn" onclick="openEdit(event, '${esc(v.id)}', this)" title="Edit details" style="margin-right:0.25rem;">edit</button>`
     : "";
   const starredClass = v.user_starred ? " starred" : "";
   const starDisabled = isOwner ? " disabled" : "";
@@ -295,15 +300,28 @@ function videoCard(v: VideoRow, streamDomain: string, currentUserId?: string, mo
   const hiddenClass = isHidden ? " hidden-card" : "";
   const hiddenLabel = isHidden && moderator ? `<span class="hidden-label">HIDDEN</span>` : "";
 
-  return `<div class="card${hiddenClass}" id="card-${esc(v.id)}" data-star-count="${v.star_count}" data-created-at="${esc(v.created_at)}" ${v.duration ? `data-video-id="${esc(v.id)}" data-stream-domain="${esc(streamDomain)}" onclick="openPlayer(this)"` : ""} style="${v.duration ? "cursor:pointer" : ""}">
+  // Title line: only show if non-empty
+  const titleHtml = v.title
+    ? `<div class="title">${hideBtn}${deleteBtn}${editBtn}${esc(v.title)}</div>`
+    : `<div class="title">${hideBtn}${deleteBtn}${editBtn}</div>`;
+
+  // URL link (shown below description if present)
+  const urlDisplay = v.url ? v.url.replace(/^https?:\/\//, "").slice(0, 40) : "";
+  const urlEllipsis = v.url && v.url.replace(/^https?:\/\//, "").length > 40 ? "..." : "";
+  const urlHtml = v.url
+    ? `<div style="margin-top:0.35rem;"><a href="${esc(v.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-size:0.8rem; display:inline-flex; align-items:center; gap:0.3rem;">&#128279; ${esc(urlDisplay)}${urlEllipsis}</a></div>`
+    : "";
+
+  return `<div class="card${hiddenClass}" id="card-${esc(v.id)}" data-star-count="${v.star_count}" data-created-at="${esc(v.created_at)}" data-title="${esc(v.title)}" data-description="${esc(v.description)}" data-url="${esc(v.url)}" ${v.duration ? `data-video-id="${esc(v.id)}" data-stream-domain="${esc(streamDomain)}" onclick="openPlayer(this)"` : ""} style="${v.duration ? "cursor:pointer" : ""}">
   <div class="thumb">${thumbImg}${badge}${hiddenLabel}</div>
   <div class="info">
-    <div class="title">${hideBtn}${deleteBtn}${esc(v.title)}</div>
+    ${titleHtml}
     <div class="meta">
       <img src="${esc(v.user_picture || "")}" alt="">
       ${esc(v.user_name)} &middot; ${fmtDate(v.created_at)}
     </div>
     ${v.description ? `<div class="desc">${esc(v.description)}</div>` : ""}
+    ${urlHtml}
     <div class="card-actions">${starBtn}</div>
   </div>
 </div>`;
@@ -314,6 +332,23 @@ function playerScript(): string {
 <div class="player-overlay" id="player-overlay">
   <button class="close-btn" onclick="closePlayer()">&times;</button>
   <iframe id="player-iframe" allow="autoplay; fullscreen" allowfullscreen></iframe>
+</div>
+<div class="player-overlay" id="edit-overlay">
+  <div style="background:#1a1a2e; border-radius:8px; padding:1.5rem; width:100%; max-width:420px; position:relative;">
+    <button class="close-btn" onclick="closeEdit()" style="position:absolute; top:0.5rem; right:0.75rem; font-size:1.5rem;">&times;</button>
+    <h2 style="margin:0 0 1rem;">Edit clip details</h2>
+    <input type="hidden" id="edit-video-id">
+    <label style="display:block; margin:0.75rem 0 0.25rem; font-weight:500;">Link</label>
+    <input type="text" id="edit-url" placeholder="https://" style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid #333; background:#0f0f0f; color:#e0e0e0; font-size:0.9rem;">
+    <label style="display:block; margin:0.75rem 0 0.25rem; font-weight:500;">Title</label>
+    <input type="text" id="edit-title" placeholder="optional" style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid #333; background:#0f0f0f; color:#e0e0e0; font-size:0.9rem;">
+    <label style="display:block; margin:0.75rem 0 0.25rem; font-weight:500;">Description</label>
+    <textarea id="edit-description" placeholder="optional" style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid #333; background:#0f0f0f; color:#e0e0e0; font-size:0.9rem; resize:vertical; min-height:60px;"></textarea>
+    <div style="margin-top:1rem; display:flex; gap:0.75rem;">
+      <button class="btn btn-primary" id="edit-save-btn" onclick="saveEdit()">Save</button>
+      <button class="btn" onclick="closeEdit()" style="color:#888;">Cancel</button>
+    </div>
+  </div>
 </div>
 <script>
 async function starVideo(e, videoId) {
@@ -428,6 +463,74 @@ async function hideVideo(e, videoId) {
     btn.disabled = false;
   }
 }
+
+function openEdit(e, videoId, btn) {
+  e.stopPropagation();
+  var card = document.getElementById('card-' + videoId);
+  if (!card) return;
+  document.getElementById('edit-video-id').value = videoId;
+  document.getElementById('edit-title').value = card.dataset.title || '';
+  document.getElementById('edit-description').value = card.dataset.description || '';
+  document.getElementById('edit-url').value = card.dataset.url || '';
+  document.getElementById('edit-overlay').classList.add('active');
+}
+
+function closeEdit() {
+  document.getElementById('edit-overlay').classList.remove('active');
+}
+
+function saveEdit() {
+  var videoId = document.getElementById('edit-video-id').value;
+  var title = document.getElementById('edit-title').value.trim();
+  var desc = document.getElementById('edit-description').value.trim();
+  var url = document.getElementById('edit-url').value.trim();
+  var btn = document.getElementById('edit-save-btn');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+
+  fetch('/api/update-video', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ videoId: videoId, title: title, description: desc, url: url }),
+  })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (data.error) { alert('Error: ' + data.error); btn.disabled = false; btn.textContent = 'Save'; return; }
+      // Update the card in-place
+      var card = document.getElementById('card-' + videoId);
+      if (card) {
+        card.dataset.title = title;
+        card.dataset.description = desc;
+        card.dataset.url = url;
+        var titleEl = card.querySelector('.title');
+        if (titleEl) {
+          // Preserve action buttons, update text
+          var buttons = titleEl.querySelectorAll('button');
+          var btnHtml = '';
+          for (var i = 0; i < buttons.length; i++) btnHtml += buttons[i].outerHTML;
+          titleEl.innerHTML = btnHtml + (title ? title.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') : '');
+        }
+        var descEl = card.querySelector('.desc');
+        if (desc) {
+          if (descEl) { descEl.textContent = desc; }
+          else {
+            var meta = card.querySelector('.meta');
+            if (meta) {
+              var d = document.createElement('div');
+              d.className = 'desc';
+              d.textContent = desc;
+              meta.insertAdjacentElement('afterend', d);
+            }
+          }
+        } else if (descEl) {
+          descEl.remove();
+        }
+      }
+      closeEdit();
+    })
+    .catch(function(err) { alert('Error: ' + err.message); })
+    .finally(function() { btn.disabled = false; btn.textContent = 'Save'; });
+}
 </script>
 <script>
 function openPlayer(el) {
@@ -442,10 +545,13 @@ function closePlayer() {
   document.getElementById('player-overlay').classList.remove('active');
 }
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') closePlayer();
+  if (e.key === 'Escape') { closePlayer(); closeEdit(); }
 });
 document.getElementById('player-overlay').addEventListener('click', function(e) {
   if (e.target === this) closePlayer();
+});
+document.getElementById('edit-overlay').addEventListener('click', function(e) {
+  if (e.target === this) closeEdit();
 });
 </script>`;
 }
@@ -676,11 +782,22 @@ app.post("/api/tus-upload", requireAuth, async (c) => {
 
   const courseId = meta.courseId || "";
   const assignmentId = meta.assignmentId || "";
-  const title = meta.title || "Untitled";
-  const description = meta.description || "";
 
   if (!courseId || !assignmentId) {
     return c.json({ error: "Missing courseId or assignmentId in Upload-Metadata" }, 400);
+  }
+
+  // One clip per student per assignment — auto-replace any existing clip
+  const existing = await c.env.DB.prepare(
+    "SELECT id FROM videos WHERE user_id = ? AND course_id = ? AND assignment_id = ?"
+  )
+    .bind(user.sub, courseId, assignmentId)
+    .first<{ id: string }>();
+
+  if (existing) {
+    // Delete old video from Stream (best-effort) and D1
+    await streamAPI(c.env, `/${existing.id}`, "DELETE").catch(() => {});
+    await c.env.DB.prepare("DELETE FROM videos WHERE id = ?").bind(existing.id).run();
   }
 
   // Build the Upload-Metadata for Stream (add our constraints)
@@ -715,13 +832,13 @@ app.post("/api/tus-upload", requireAuth, async (c) => {
   // Location looks like: https://upload.cloudflarestream.com/tus/VIDEOUID...
   const videoId = res.headers.get("stream-media-id") || location.split("/").pop()?.split("?")[0] || "";
 
-  // Insert video record in D1
+  // Insert video record in D1 — no metadata required yet, student can add it later
   if (videoId) {
     await c.env.DB.prepare(
-      `INSERT INTO videos (id, user_id, course_id, assignment_id, title, description)
-       VALUES (?, ?, ?, ?, ?, ?)`
+      `INSERT INTO videos (id, user_id, course_id, assignment_id, title, description, url)
+       VALUES (?, ?, ?, ?, '', '', '')`
     )
-      .bind(videoId, user.sub, courseId, assignmentId, title, description)
+      .bind(videoId, user.sub, courseId, assignmentId)
       .run();
   }
 
@@ -826,6 +943,40 @@ app.post("/api/hide-video", requireAuth, async (c) => {
   return c.json({ hidden: !row.hidden });
 });
 
+/** Update video metadata — owner can edit title, description, url at any time. */
+app.post("/api/update-video", requireAuth, async (c) => {
+  const user = c.var.user!;
+  const { videoId, title, description, url } = await c.req.json<{
+    videoId: string;
+    title?: string;
+    description?: string;
+    url?: string;
+  }>();
+
+  if (!videoId) return c.json({ error: "Missing videoId" }, 400);
+
+  // Verify ownership
+  const row = await c.env.DB.prepare("SELECT user_id FROM videos WHERE id = ?")
+    .bind(videoId)
+    .first<{ user_id: string }>();
+
+  if (!row) return c.json({ error: "Video not found" }, 404);
+  if (row.user_id !== user.sub) return c.json({ error: "Not your video" }, 403);
+
+  await c.env.DB.prepare(
+    "UPDATE videos SET title = ?, description = ?, url = ? WHERE id = ?"
+  )
+    .bind(
+      (title ?? "").trim(),
+      (description ?? "").trim(),
+      (url ?? "").trim(),
+      videoId
+    )
+    .run();
+
+  return c.json({ ok: true });
+});
+
 // CORS preflight for TUS (tus-js-client sends OPTIONS + special headers)
 app.options("/api/tus-upload", (c) => {
   return new Response(null, {
@@ -916,6 +1067,7 @@ app.get("/:courseId/:assignmentId", async (c) => {
   }
 
   const sd = c.env.STREAM_CUSTOMER_SUBDOMAIN;
+  const hasOwnClip = videos.some((v) => v.user_id === user.sub);
   const cards = videos.length
     ? `<div class="card-grid">${videos
         .map((v) => videoCard(v, sd, user.sub, moderator))
@@ -925,13 +1077,14 @@ app.get("/:courseId/:assignmentId", async (c) => {
         <p>Be the first!</p>
       </div>`;
 
+  const uploadLabel = hasOwnClip ? "Replace your clip" : "Upload a clip";
   const body = `
     <div class="breadcrumb">
       <a href="/">Home</a> / ${esc(courseId)} / ${esc(assignmentId)}
     </div>
     <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem;">
       <h1 style="margin:0;">Assignment ${esc(assignmentId)}</h1>
-      <a href="/${esc(courseId)}/${esc(assignmentId)}/upload" class="btn btn-primary">Upload a clip</a>
+      <a href="/${esc(courseId)}/${esc(assignmentId)}/upload" class="btn btn-primary">${uploadLabel}</a>
     </div>
     <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem; margin-top:0.5rem;">
       <p style="color:#888; margin:0;">Course ${esc(courseId)} &middot; ${videos.length} clip${videos.length !== 1 ? "s" : ""}</p>
@@ -957,6 +1110,13 @@ app.get(
 
     const galleryUrl = `/${esc(courseId)}/${esc(assignmentId)}`;
 
+    // Check if student already has a clip for this assignment
+    const existing = await c.env.DB.prepare(
+      "SELECT id, title, description, url FROM videos WHERE user_id = ? AND course_id = ? AND assignment_id = ?"
+    )
+      .bind(user.sub, courseId, assignmentId)
+      .first<{ id: string; title: string; description: string; url: string }>();
+
     const body = `
     <div class="breadcrumb">
       <a href="/">Home</a> /
@@ -965,63 +1125,74 @@ app.get(
     </div>
     <h1>Upload a Clip</h1>
     <p style="color:#888;">Assignment ${esc(assignmentId)} in course ${esc(courseId)}</p>
+    ${existing ? `<p style="color:#f7931a; font-size:0.9rem;">You already have a clip for this assignment. Uploading a new file will replace it.</p>` : ""}
 
-    <form id="upload-form" class="upload-form">
-      <label for="title">Title</label>
-      <input type="text" id="title" name="title" required placeholder="e.g. Player controller with wall jump">
-
-      <label for="description">Description (optional)</label>
-      <textarea id="description" name="description" placeholder="What are you showing off?"></textarea>
-
+    <div class="upload-form">
       <label for="file">Video file (.webm, .mp4 &mdash; max 500MB, 10 min)</label>
-      <input type="file" id="file" name="file" accept="video/webm,video/mp4,video/*" required>
+      <input type="file" id="file" name="file" accept="video/webm,video/mp4,video/*">
 
       <div id="progress-wrap">
         <div id="progress-bar"><div></div></div>
         <div id="progress-text">Uploading...</div>
       </div>
 
-      <div style="margin-top:1.25rem;">
-        <button type="submit" class="btn btn-primary" id="submit-btn">Upload</button>
+      <div id="metadata-section" style="display:none; margin-top:1.5rem; border-top:1px solid #2a2a4a; padding-top:1rem;">
+        <p style="color:#888; font-size:0.85rem; margin:0 0 1rem;">Optional &mdash; you can always edit this later from the gallery.</p>
+
+        <label for="url">Link <span style="color:#666; font-weight:normal;">(playable game, GitHub, etc.)</span></label>
+        <input type="text" id="url" name="url" placeholder="https://">
+
+        <label for="title">Title</label>
+        <input type="text" id="title" name="title" placeholder="e.g. Player controller with wall jump">
+
+        <label for="description">Description</label>
+        <textarea id="description" name="description" placeholder="What are you showing off?"></textarea>
+
+        <div style="margin-top:1.25rem; display:flex; gap:0.75rem; align-items:center;">
+          <button class="btn btn-primary" id="save-btn" onclick="saveMetadata()" disabled>Save details</button>
+          <a href="${galleryUrl}" id="skip-link" style="color:#888; font-size:0.85rem; display:none;">Skip &mdash; go to gallery</a>
+          <span id="upload-pending-hint" style="color:#666; font-size:0.85rem;">Upload in progress...</span>
+        </div>
       </div>
-    </form>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/tus-js-client@4/dist/tus.min.js"></script>
     <script>
-    var form = document.getElementById('upload-form');
-    form.addEventListener('submit', function(e) {
-      e.preventDefault();
-      var title = document.getElementById('title').value.trim();
-      var desc = document.getElementById('description').value.trim();
-      var file = document.getElementById('file').files[0];
-      var btn = document.getElementById('submit-btn');
+    var videoId = null;
+    var galleryUrl = '${galleryUrl}';
+    var uploadDone = false;
+
+    var fileInput = document.getElementById('file');
+    fileInput.addEventListener('change', function() {
+      var file = fileInput.files[0];
+      if (!file) return;
+      if (file.size > 500 * 1024 * 1024) { alert('File too large (max 500MB).'); fileInput.value = ''; return; }
+      startUpload(file);
+    });
+
+    function startUpload(file) {
       var progressWrap = document.getElementById('progress-wrap');
       var progressBar = document.getElementById('progress-bar').firstElementChild;
       var progressText = document.getElementById('progress-text');
+      var metaSection = document.getElementById('metadata-section');
 
-      if (!file) return alert('Please select a video file.');
-      if (file.size > 500 * 1024 * 1024) return alert('File too large (max 500MB).');
-
-      btn.disabled = true;
-      btn.textContent = 'Uploading...';
+      fileInput.disabled = true;
       progressWrap.style.display = 'block';
+      metaSection.style.display = 'block';
 
       var upload = new tus.Upload(file, {
         endpoint: '/api/tus-upload',
-        chunkSize: 50 * 1024 * 1024, // 50 MB chunks
+        chunkSize: 50 * 1024 * 1024,
         retryDelays: [0, 1000, 3000, 5000],
         metadata: {
           filename: file.name,
           filetype: file.type,
           courseId: '${esc(courseId)}',
           assignmentId: '${esc(assignmentId)}',
-          title: title,
-          description: desc,
         },
         onError: function(err) {
           progressText.textContent = 'Upload failed: ' + err.message;
-          btn.disabled = false;
-          btn.textContent = 'Upload';
+          fileInput.disabled = false;
         },
         onProgress: function(bytesUploaded, bytesTotal) {
           var pct = Math.round((bytesUploaded / bytesTotal) * 100);
@@ -1031,14 +1202,59 @@ app.get(
           progressText.textContent = 'Uploading... ' + mb + ' / ' + total + ' MB (' + pct + '%)';
         },
         onSuccess: function() {
-          progressText.textContent = 'Upload complete! Redirecting...';
+          uploadDone = true;
+          progressText.textContent = 'Upload complete!';
           progressBar.style.width = '100%';
-          window.location.href = '${galleryUrl}';
+          document.getElementById('save-btn').disabled = false;
+          document.getElementById('skip-link').style.display = '';
+          document.getElementById('upload-pending-hint').style.display = 'none';
+          // Extract video ID from the upload URL
+          var url = upload.url || '';
+          var parts = url.split('/');
+          videoId = parts[parts.length - 1] ? parts[parts.length - 1].split('?')[0] : null;
         },
       });
 
       upload.start();
-    });
+    }
+
+    function saveMetadata() {
+      var title = document.getElementById('title').value.trim();
+      var desc = document.getElementById('description').value.trim();
+      var url = document.getElementById('url').value.trim();
+      var btn = document.getElementById('save-btn');
+
+      if (!title && !desc && !url) {
+        window.location.href = galleryUrl;
+        return;
+      }
+
+      if (!videoId) {
+        if (!uploadDone) { alert('Upload still in progress — hang on!'); return; }
+        // Video ID unknown but upload done; just go to gallery
+        window.location.href = galleryUrl;
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+
+      fetch('/api/update-video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoId: videoId, title: title, description: desc, url: url }),
+      })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.error) { alert('Error: ' + data.error); btn.disabled = false; btn.textContent = 'Save details'; return; }
+          window.location.href = galleryUrl;
+        })
+        .catch(function(err) {
+          alert('Error: ' + err.message);
+          btn.disabled = false;
+          btn.textContent = 'Save details';
+        });
+    }
     </script>`;
 
     return c.html(layout("Upload", body, user));
