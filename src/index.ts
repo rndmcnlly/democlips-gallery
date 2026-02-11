@@ -1030,7 +1030,10 @@ app.get("/", (c) => {
         <p style="color:#888; margin-top:2rem;">
           Use the link your instructor gave you to go to your course's assignment gallery.
         </p>
-        ${moderator ? `<p style="margin-top:2rem;"><a href="/moderation" class="btn btn-primary" style="background:#7c3aed;">Moderation Dashboard</a></p>` : ""}
+        <p style="margin-top:1.5rem;">
+          <a href="/onboarding" style="color:#6cb4ee;">Instructor? Set up your gallery &rarr;</a>
+        </p>
+        ${moderator ? `<p style="margin-top:1rem;"><a href="/moderation" class="btn btn-primary" style="background:#7c3aed;">Moderation Dashboard</a></p>` : ""}
       </div>`
     : `<div style="text-align:center; padding: 4rem 0;">
         <h1 style="font-size:2rem;">Demo<span style="color:#f7931a">Clips</span></h1>
@@ -1044,6 +1047,151 @@ app.get("/", (c) => {
       </div>`;
 
   return c.html(layout("Welcome", body, user));
+});
+
+/** Onboarding: help instructors extract course/assignment IDs from Canvas URLs. */
+app.get("/onboarding", requireAuth, async (c) => {
+  const user = c.var.user!;
+
+  // Build moderator contact list from env, enriched with DB profiles
+  const modEmails = (c.env.MODERATOR_EMAILS || "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+
+  type ModProfile = { email: string; name: string; picture: string };
+  const modProfiles = new Map<string, ModProfile>();
+  if (modEmails.length) {
+    const placeholders = modEmails.map(() => "?").join(",");
+    const { results } = await c.env.DB.prepare(
+      `SELECT email, name, picture FROM users WHERE LOWER(email) IN (${placeholders})`
+    )
+      .bind(...modEmails)
+      .all<ModProfile>();
+    for (const row of results) {
+      modProfiles.set(row.email.toLowerCase(), row);
+    }
+  }
+
+  const modListHtml = modEmails.length
+    ? modEmails
+        .map((e) => {
+          const profile = modProfiles.get(e);
+          if (profile) {
+            return `<a href="mailto:${esc(e)}" style="display:inline-flex; align-items:center; gap:0.5rem;
+              text-decoration:none; color:#e0e0e0; background:#1a1a2e; border:1px solid #2a2a4a;
+              border-radius:8px; padding:0.4rem 0.75rem 0.4rem 0.4rem; margin:0.25rem 0;">
+              <img src="${esc(profile.picture)}" style="width:24px; height:24px; border-radius:50%;">
+              <span>${esc(profile.name)}</span>
+              <span style="color:#888; font-size:0.8rem;">${esc(e)}</span>
+            </a>`;
+          }
+          return `<a href="mailto:${esc(e)}" style="color:#6cb4ee;">${esc(e)}</a>`;
+        })
+        .join(" ")
+    : `<span style="color:#888;">(none configured)</span>`;
+
+  const body = `
+    <div class="breadcrumb"><a href="/">Home</a> / Instructor Onboarding</div>
+
+    <div style="max-width:640px; margin:2rem auto;">
+      <h1 style="font-size:1.5rem; margin-bottom:0.5rem;">Instructor Onboarding</h1>
+      <p style="color:#aaa; margin-bottom:2rem;">
+        Set up a DemoClips gallery for your Canvas assignment in three steps.
+      </p>
+
+      <h2 style="font-size:1.1rem; color:#f7931a; margin-bottom:0.5rem;">Step 1 &mdash; Paste your Canvas assignment URL</h2>
+      <p style="color:#aaa; font-size:0.9rem; margin-bottom:0.75rem;">
+        Open the assignment in Canvas and copy the full URL from your browser's address bar.
+        It should look like:<br>
+        <code style="color:#888; font-size:0.85rem;">https://canvas.ucsc.edu/courses/<b style="color:#6cb4ee;">12345</b>/assignments/<b style="color:#6cb4ee;">67890</b></code>
+      </p>
+      <input
+        type="text" id="canvas-url"
+        placeholder="https://canvas.ucsc.edu/courses/…/assignments/…"
+        style="width:100%; padding:0.6rem 0.75rem; background:#111; border:1px solid #333;
+               border-radius:6px; color:#e0e0e0; font-size:0.95rem; box-sizing:border-box;"
+      >
+      <p id="parse-error" style="color:#e53e3e; font-size:0.85rem; margin-top:0.4rem; display:none;"></p>
+
+      <div id="result" style="display:none; margin-top:1.5rem;">
+        <h2 style="font-size:1.1rem; color:#f7931a; margin-bottom:0.5rem;">Step 2 &mdash; Share this gallery link with students</h2>
+        <p style="color:#aaa; font-size:0.9rem; margin-bottom:0.5rem;">
+          Students who visit this link will be prompted to sign in with their @ucsc.edu account,
+          then they can upload a clip or browse the gallery.
+        </p>
+        <div style="background:#111; border:1px solid #333; border-radius:6px; padding:0.6rem 0.75rem;
+                    display:flex; align-items:center; gap:0.5rem;">
+          <code id="gallery-url" style="flex:1; word-break:break-all; color:#6cb4ee; font-size:0.9rem;"></code>
+          <button id="copy-btn" onclick="copyUrl()" class="btn btn-primary"
+                  style="flex-shrink:0; font-size:0.8rem; padding:0.35rem 0.75rem;">Copy</button>
+        </div>
+        <table style="margin-top:0.75rem; font-size:0.85rem; color:#888;">
+          <tr><td style="padding-right:1rem;">Course ID</td><td id="out-course" style="color:#e0e0e0; font-family:monospace;"></td></tr>
+          <tr><td style="padding-right:1rem;">Assignment ID</td><td id="out-assignment" style="color:#e0e0e0; font-family:monospace;"></td></tr>
+        </table>
+
+        <h2 style="font-size:1.1rem; color:#f7931a; margin-top:2rem; margin-bottom:0.5rem;">Step 3 &mdash; Know how moderation works</h2>
+        <p style="color:#aaa; font-size:0.9rem; margin-bottom:0.5rem;">
+          Students can upload one clip per assignment. They can delete and re-upload their own clip,
+          but they <strong>cannot</strong> hide other students' clips.
+        </p>
+        <p style="color:#aaa; font-size:0.9rem; margin-bottom:0.5rem;">
+          Only <strong>moderators</strong> can hide clips (e.g. for policy violations). Hidden clips
+          are not deleted &mdash; they're just invisible to non-moderators and can be un-hidden later.
+        </p>
+        <p style="color:#aaa; font-size:0.9rem; margin-bottom:0.5rem;">
+          If you need a clip hidden, or if you'd like moderator access yourself,
+          contact a current moderator:
+        </p>
+        <p style="margin-bottom:0.5rem;">${modListHtml}</p>
+      </div>
+
+    </div>
+
+    <script>
+    var input = document.getElementById("canvas-url");
+    var result = document.getElementById("result");
+    var error = document.getElementById("parse-error");
+    var galleryUrl = document.getElementById("gallery-url");
+    var outCourse = document.getElementById("out-course");
+    var outAssignment = document.getElementById("out-assignment");
+    var copyBtn = document.getElementById("copy-btn");
+
+    var pattern = /\\/courses\\/(\\d+)\\/assignments\\/(\\d+)/;
+
+    function parseUrl() {
+      var val = input.value.trim();
+      error.style.display = "none";
+      if (!val) { result.style.display = "none"; return; }
+      var m = val.match(pattern);
+      if (!m) {
+        error.textContent = "Could not find course and assignment IDs. Paste the full Canvas URL, e.g. https://canvas.ucsc.edu/courses/12345/assignments/67890";
+        error.style.display = "block";
+        result.style.display = "none";
+        return;
+      }
+      var courseId = m[1];
+      var assignmentId = m[2];
+      var url = location.origin + "/" + courseId + "/" + assignmentId;
+      galleryUrl.textContent = url;
+      outCourse.textContent = courseId;
+      outAssignment.textContent = assignmentId;
+      result.style.display = "block";
+    }
+
+    input.addEventListener("input", parseUrl);
+    input.addEventListener("paste", function() { setTimeout(parseUrl, 0); });
+
+    function copyUrl() {
+      navigator.clipboard.writeText(galleryUrl.textContent).then(function() {
+        copyBtn.textContent = "Copied!";
+        setTimeout(function() { copyBtn.textContent = "Copy"; }, 1500);
+      });
+    }
+    </script>`;
+
+  return c.html(layout("Instructor Onboarding", body, user));
 });
 
 /** Moderation dashboard: per-course, per-assignment summary stats. Moderators only. */
