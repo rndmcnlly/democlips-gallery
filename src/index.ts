@@ -235,6 +235,27 @@ function layout(title: string, body: string, user: User | null = null): string {
     text-align: center; padding: 2rem; font-size: 0.8rem; color: #555;
     border-top: 1px solid #1a1a2e; margin-top: 3rem;
   }
+  .mod-table {
+    width: 100%; border-collapse: collapse; font-size: 0.9rem;
+  }
+  .mod-table th {
+    text-align: left; padding: 0.5rem 0.75rem; border-bottom: 2px solid #2a2a4a;
+    color: #888; font-weight: 600; font-size: 0.8rem; text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .mod-table td {
+    padding: 0.5rem 0.75rem; border-bottom: 1px solid #1a1a2e;
+  }
+  .mod-table tr:hover td { background: #1a1a2e; }
+  .mod-table .course-header td {
+    padding: 1rem 0.75rem 0.5rem; font-weight: 700; font-size: 1rem;
+    color: #fff; border-bottom: 1px solid #2a2a4a; background: none;
+  }
+  .mod-badge {
+    display: inline-block; font-size: 0.75rem; font-weight: 600;
+    padding: 1px 6px; border-radius: 3px;
+  }
+  .mod-badge-warn { background: #e53e3e22; color: #e53e3e; }
 </style>
 </head>
 <body>
@@ -997,6 +1018,8 @@ app.options("/api/tus-upload", (c) => {
 app.get("/", (c) => {
   const user = c.var.user;
 
+  const moderator = isModerator(c.env, user);
+
   const body = user
     ? `<div style="text-align:center; padding: 4rem 0;">
         <h1 style="font-size:2rem;">Demo<span style="color:#f7931a">Clips</span></h1>
@@ -1007,6 +1030,7 @@ app.get("/", (c) => {
         <p style="color:#888; margin-top:2rem;">
           Use the link your instructor gave you to go to your course's assignment gallery.
         </p>
+        ${moderator ? `<p style="margin-top:2rem;"><a href="/moderation" class="btn btn-primary" style="background:#7c3aed;">Moderation Dashboard</a></p>` : ""}
       </div>`
     : `<div style="text-align:center; padding: 4rem 0;">
         <h1 style="font-size:2rem;">Demo<span style="color:#f7931a">Clips</span></h1>
@@ -1020,6 +1044,80 @@ app.get("/", (c) => {
       </div>`;
 
   return c.html(layout("Welcome", body, user));
+});
+
+/** Moderation dashboard: per-course, per-assignment summary stats. Moderators only. */
+app.get("/moderation", requireAuth, async (c) => {
+  const user = c.var.user!;
+  if (!isModerator(c.env, user)) {
+    return c.text("Not authorized", 403);
+  }
+
+  type SummaryRow = {
+    course_id: string;
+    assignment_id: string;
+    total_clips: number;
+    total_stars: number;
+    hidden_clips: number;
+  };
+
+  const { results: rows } = await c.env.DB.prepare(
+    `SELECT
+       v.course_id,
+       v.assignment_id,
+       COUNT(*) as total_clips,
+       COALESCE(SUM(sc.star_count), 0) as total_stars,
+       SUM(v.hidden) as hidden_clips
+     FROM videos v
+     LEFT JOIN (
+       SELECT video_id, COUNT(*) as star_count FROM stars GROUP BY video_id
+     ) sc ON sc.video_id = v.id
+     GROUP BY v.course_id, v.assignment_id
+     ORDER BY v.course_id, v.assignment_id`
+  ).all<SummaryRow>();
+
+  // Group rows by course
+  const courses = new Map<string, SummaryRow[]>();
+  for (const row of rows) {
+    const list = courses.get(row.course_id);
+    if (list) {
+      list.push(row);
+    } else {
+      courses.set(row.course_id, [row]);
+    }
+  }
+
+  let tableRows = "";
+  for (const [courseId, assignments] of courses) {
+    tableRows += `<tr class="course-header"><td colspan="4">${esc(courseId)}</td></tr>`;
+    for (const a of assignments) {
+      const hiddenBadge = a.hidden_clips > 0
+        ? ` <span class="mod-badge mod-badge-warn">${a.hidden_clips} hidden</span>`
+        : "";
+      tableRows += `<tr>
+        <td style="padding-left:1.5rem;">
+          <a href="/${esc(a.course_id)}/${esc(a.assignment_id)}">${esc(a.assignment_id)}</a>
+        </td>
+        <td>${a.total_clips}</td>
+        <td>${a.total_stars}</td>
+        <td>${hiddenBadge}</td>
+      </tr>`;
+    }
+  }
+
+  const body = `
+    <div class="breadcrumb"><a href="/">Home</a> / Moderation</div>
+    <h1>Moderation Dashboard</h1>
+    <p style="color:#888;">Per-assignment summary across all courses. Click an assignment to open its gallery.</p>
+    ${rows.length === 0
+      ? `<div class="empty-state"><p>No clips in the system yet.</p></div>`
+      : `<table class="mod-table">
+          <thead><tr><th>Assignment</th><th>Clips</th><th>Stars</th><th>Flags</th></tr></thead>
+          <tbody>${tableRows}</tbody>
+        </table>`
+    }`;
+
+  return c.html(layout("Moderation", body, user));
 });
 
 /** Assignment gallery: view all clips for a course/assignment, with upload link. */
