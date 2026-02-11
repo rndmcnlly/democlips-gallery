@@ -23,3 +23,10 @@ CREATE TABLE IF NOT EXISTS videos (
 
 CREATE INDEX IF NOT EXISTS idx_videos_assignment ON videos(course_id, assignment_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_videos_user ON videos(user_id);
+
+CREATE TABLE IF NOT EXISTS stars (
+  user_id TEXT NOT NULL REFERENCES users(id),
+  video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (user_id, video_id)
+) STRICT;

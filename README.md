@@ -135,11 +135,20 @@ npx wrangler d1 execute democlips-gallery --remote --file=schema.sql
 | `/auth/login`, `/auth/callback`, `/auth/logout` | Google OAuth flow |
 | `/api/tus-upload` | TUS resumable upload initiation (called by client JS) |
 | `/api/delete-video` | Delete a video (owner only) |
+| `/api/star` | Toggle a star on a video (no self-starring) |
 
 Instructors share a direct link like `https://gallery.democlips.dev/12345/1`
 with students. There's no course/assignment creation step — the URL structure
-is open. Each course is a separate space; the homepage doesn't show
-cross-course content.
+is open-ended and convention-based (e.g. `/{canvasCourseId}/{assignmentNumber}`).
+
+**Access model**: Gallery URLs are semi-secret. Any authenticated `@ucsc.edu`
+user who knows a course/assignment URL can view and upload to it, but URLs
+are not listed or discoverable from within the app. In practice, only students
+and staff in a course will have the link (shared by the instructor via Canvas
+or similar). This is a deliberate "unlisted" model — simple, no enrollment
+database needed — not a hard access control boundary.
+
+Each course is a separate space; the homepage doesn't show cross-course content.
 
 ### Upload Flow
 
@@ -173,7 +182,7 @@ Google OAuth restricted to `@ucsc.edu` accounts:
 ## Project Structure
 
 ```
-src/index.ts      — the entire app (~450 lines of Hono)
+src/index.ts      — the entire app (single-file Hono)
 schema.sql        — D1 database schema (users + videos tables)
 wrangler.jsonc    — Cloudflare Worker config (D1 binding, domain, env vars)
 .dev.vars.example — template for local dev secrets

@@ -50,6 +50,8 @@ type VideoRow = {
   user_name: string;
   user_picture: string;
   user_email: string;
+  star_count: number;
+  user_starred: number;
 };
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -177,6 +179,32 @@ function layout(title: string, body: string, user: User | null = null): string {
     padding: 2px 8px; border-radius: 4px; cursor: pointer; float: right;
   }
   .delete-btn:hover { border-color: #e53e3e; color: #e53e3e; }
+  .star-btn {
+    background: none; border: 1px solid #555; color: #888; font-size: 0.8rem;
+    padding: 2px 8px; border-radius: 4px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 4px;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .star-btn:hover { border-color: #f7931a; color: #f7931a; }
+  .star-btn.starred { border-color: #f7931a; color: #f7931a; }
+  .star-btn .star-icon::before { content: "\\2606"; }
+  .star-btn.starred .star-icon::before { content: "\\2605"; }
+  .star-btn:disabled { opacity: 0.4; cursor: default; }
+  .card-actions {
+    display: flex; align-items: center; gap: 0.5rem;
+    margin-top: 0.5rem; justify-content: space-between;
+  }
+  .sort-toggle {
+    display: inline-flex; font-size: 0.8rem; border: 1px solid #333;
+    border-radius: 6px; overflow: hidden;
+  }
+  .sort-toggle button {
+    background: none; border: none; color: #888; padding: 0.3rem 0.75rem;
+    cursor: pointer; font-size: 0.8rem;
+  }
+  .sort-toggle button:not(:last-child) { border-right: 1px solid #333; }
+  .sort-toggle button.active { background: #2a2a4a; color: #fff; }
+  .sort-toggle button:hover { color: #ccc; }
   .breadcrumb { font-size: 0.85rem; color: #888; margin-bottom: 1rem; }
   .breadcrumb a { color: #6cb4ee; }
   footer {
@@ -232,8 +260,13 @@ function videoCard(v: VideoRow, streamDomain: string, currentUserId?: string): s
   const deleteBtn = isOwner
     ? `<button class="delete-btn" onclick="deleteVideo(event, '${esc(v.id)}')" title="Delete your clip">delete</button>`
     : "";
+  const starredClass = v.user_starred ? " starred" : "";
+  const starDisabled = isOwner ? " disabled" : "";
+  const starBtn = currentUserId
+    ? `<button class="star-btn${starredClass}"${starDisabled} onclick="starVideo(event, '${esc(v.id)}')" title="${isOwner ? "Can't star your own clip" : "Star this clip"}"><span class="star-icon"></span><span class="star-count">${v.star_count}</span></button>`
+    : "";
 
-  return `<div class="card" id="card-${esc(v.id)}" ${v.duration ? `data-video-id="${esc(v.id)}" data-stream-domain="${esc(streamDomain)}" onclick="openPlayer(this)"` : ""} style="${v.duration ? "cursor:pointer" : ""}">
+  return `<div class="card" id="card-${esc(v.id)}" data-star-count="${v.star_count}" data-created-at="${esc(v.created_at)}" ${v.duration ? `data-video-id="${esc(v.id)}" data-stream-domain="${esc(streamDomain)}" onclick="openPlayer(this)"` : ""} style="${v.duration ? "cursor:pointer" : ""}">
   <div class="thumb">${thumbImg}${badge}</div>
   <div class="info">
     <div class="title">${deleteBtn}${esc(v.title)}</div>
@@ -242,6 +275,7 @@ function videoCard(v: VideoRow, streamDomain: string, currentUserId?: string): s
       ${esc(v.user_name)} &middot; ${fmtDate(v.created_at)}
     </div>
     ${v.description ? `<div class="desc">${esc(v.description)}</div>` : ""}
+    <div class="card-actions">${starBtn}</div>
   </div>
 </div>`;
 }
@@ -253,6 +287,50 @@ function playerScript(): string {
   <iframe id="player-iframe" allow="autoplay; fullscreen" allowfullscreen></iframe>
 </div>
 <script>
+async function starVideo(e, videoId) {
+  e.stopPropagation();
+  var btn = e.currentTarget;
+  if (btn.disabled) return;
+  btn.disabled = true;
+  try {
+    var res = await fetch('/api/star', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ videoId: videoId }),
+    });
+    if (!res.ok) {
+      var err = await res.json();
+      throw new Error(err.error || 'Star failed');
+    }
+    var data = await res.json();
+    btn.classList.toggle('starred', data.starred);
+    btn.querySelector('.star-count').textContent = data.starCount;
+    var card = document.getElementById('card-' + videoId);
+    if (card) card.dataset.starCount = data.starCount;
+  } catch (err) {
+    alert('Error: ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function sortCards(mode, toggleBtn) {
+  var buttons = toggleBtn.parentElement.querySelectorAll('button');
+  for (var i = 0; i < buttons.length; i++) buttons[i].classList.remove('active');
+  toggleBtn.classList.add('active');
+  var grid = document.querySelector('.card-grid');
+  if (!grid) return;
+  var cards = Array.prototype.slice.call(grid.children);
+  cards.sort(function(a, b) {
+    if (mode === 'stars') {
+      var diff = (parseInt(b.dataset.starCount) || 0) - (parseInt(a.dataset.starCount) || 0);
+      if (diff !== 0) return diff;
+    }
+    return (b.dataset.createdAt || '').localeCompare(a.dataset.createdAt || '');
+  });
+  for (var i = 0; i < cards.length; i++) grid.appendChild(cards[i]);
+}
+
 async function deleteVideo(e, videoId) {
   e.stopPropagation();
   if (!confirm('Delete this clip? This cannot be undone.')) return;
@@ -610,6 +688,47 @@ app.post("/api/delete-video", requireAuth, async (c) => {
   return c.json({ ok: true });
 });
 
+/** Toggle a star on a video — no self-starring allowed. */
+app.post("/api/star", requireAuth, async (c) => {
+  const user = c.var.user!;
+  const { videoId } = await c.req.json<{ videoId: string }>();
+
+  if (!videoId) return c.json({ error: "Missing videoId" }, 400);
+
+  // Verify the video exists and check ownership
+  const video = await c.env.DB.prepare("SELECT user_id FROM videos WHERE id = ?")
+    .bind(videoId)
+    .first<{ user_id: string }>();
+
+  if (!video) return c.json({ error: "Video not found" }, 404);
+  if (video.user_id === user.sub) return c.json({ error: "Cannot star your own video" }, 403);
+
+  // Check if already starred
+  const existing = await c.env.DB.prepare(
+    "SELECT 1 FROM stars WHERE user_id = ? AND video_id = ?"
+  )
+    .bind(user.sub, videoId)
+    .first();
+
+  if (existing) {
+    await c.env.DB.prepare("DELETE FROM stars WHERE user_id = ? AND video_id = ?")
+      .bind(user.sub, videoId)
+      .run();
+  } else {
+    await c.env.DB.prepare("INSERT INTO stars (user_id, video_id) VALUES (?, ?)")
+      .bind(user.sub, videoId)
+      .run();
+  }
+
+  const count = await c.env.DB.prepare(
+    "SELECT COUNT(*) as c FROM stars WHERE video_id = ?"
+  )
+    .bind(videoId)
+    .first<{ c: number }>();
+
+  return c.json({ starred: !existing, starCount: count!.c });
+});
+
 // CORS preflight for TUS (tus-js-client sends OPTIONS + special headers)
 app.options("/api/tus-upload", (c) => {
   return new Response(null, {
@@ -638,8 +757,7 @@ app.get("/", (c) => {
           See what others are building. Get inspired.
         </p>
         <p style="color:#888; margin-top:2rem;">
-          Use the link your instructor gave you to go to your course's assignment gallery.<br>
-          It looks like <code style="background:#1a1a2e; padding:0.2rem 0.5rem; border-radius:4px;">gallery.democlips.dev/<em>courseId</em>/<em>assignmentId</em></code>
+          Use the link your instructor gave you to go to your course's assignment gallery.
         </p>
       </div>`
     : `<div style="text-align:center; padding: 4rem 0;">
@@ -675,12 +793,14 @@ app.get("/:courseId/:assignmentId", async (c) => {
   }
 
   const { results: videos } = await c.env.DB.prepare(
-    `SELECT v.*, u.name as user_name, u.picture as user_picture, u.email as user_email
+    `SELECT v.*, u.name as user_name, u.picture as user_picture, u.email as user_email,
+            (SELECT COUNT(*) FROM stars s WHERE s.video_id = v.id) as star_count,
+            EXISTS(SELECT 1 FROM stars s WHERE s.video_id = v.id AND s.user_id = ?) as user_starred
      FROM videos v JOIN users u ON v.user_id = u.id
      WHERE v.course_id = ? AND v.assignment_id = ?
      ORDER BY v.created_at DESC`
   )
-    .bind(courseId, assignmentId)
+    .bind(user.sub, courseId, assignmentId)
     .all<VideoRow>();
 
   // Backfill duration for videos still processing
@@ -714,7 +834,13 @@ app.get("/:courseId/:assignmentId", async (c) => {
       <h1 style="margin:0;">Assignment ${esc(assignmentId)}</h1>
       <a href="/${esc(courseId)}/${esc(assignmentId)}/upload" class="btn btn-primary">Upload a clip</a>
     </div>
-    <p style="color:#888;">Course ${esc(courseId)} &middot; ${videos.length} clip${videos.length !== 1 ? "s" : ""}</p>
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem; margin-top:0.5rem;">
+      <p style="color:#888; margin:0;">Course ${esc(courseId)} &middot; ${videos.length} clip${videos.length !== 1 ? "s" : ""}</p>
+      ${videos.length > 1 ? `<div class="sort-toggle">
+        <button class="active" onclick="sortCards('newest', this)">Newest</button>
+        <button onclick="sortCards('stars', this)">Most starred</button>
+      </div>` : ""}
+    </div>
     ${cards}
     ${playerScript()}`;
 
