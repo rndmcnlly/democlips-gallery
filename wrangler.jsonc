@@ -1,0 +1,33 @@
+{
+  "name": "democlips-gallery",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-01-01",
+
+  // Custom domain — requires democlips.dev as an active zone in your CF account
+  "routes": [
+    { "pattern": "gallery.democlips.dev", "custom_domain": true }
+  ],
+
+  // D1 database binding — replace database_id after running: wrangler d1 create democlips-gallery
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "democlips-gallery",
+      "database_id": "bca8af68-9635-4f03-a45a-d16818d3ac09"
+    }
+  ],
+
+  // Non-secret env vars
+  "vars": {
+    "GOOGLE_REDIRECT_URI": "https://gallery.democlips.dev/auth/callback",
+    "ALLOWED_DOMAIN": "ucsc.edu",
+    "STREAM_CUSTOMER_SUBDOMAIN": "gl9ork98qppcprc8"
+  }
+
+  // Secrets (set via `wrangler secret put`):
+  //   GOOGLE_CLIENT_ID
+  //   GOOGLE_CLIENT_SECRET
+  //   JWT_SECRET
+  //   CLOUDFLARE_API_TOKEN
+  //   CLOUDFLARE_ACCOUNT_ID
+}
