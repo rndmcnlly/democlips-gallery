@@ -136,6 +136,7 @@ npx wrangler d1 execute democlips-gallery --remote --file=schema.sql
 | `/api/tus-upload` | TUS resumable upload initiation (called by client JS) |
 | `/api/delete-video` | Delete a video (owner only) |
 | `/api/star` | Toggle a star on a video (no self-starring) |
+| `/api/hide-video` | Toggle hide/unhide on a video (moderators only) |
 
 Instructors share a direct link like `https://gallery.democlips.dev/12345/1`
 with students. There's no course/assignment creation step — the URL structure
@@ -209,6 +210,7 @@ re-set them unless rotating credentials.
 | `JWT_SECRET` | Random key for signing session cookies | Auto-generated |
 | `CLOUDFLARE_API_TOKEN` | CF API token with Stream:Edit permission | CF account admins |
 | `CLOUDFLARE_ACCOUNT_ID` | CF account identifier | CF account admins |
+| `MODERATOR_EMAILS` | Comma-separated list of moderator emails (e.g. `a@ucsc.edu,b@ucsc.edu`) | CF env vars (not in source) |
 
 To rotate a secret:
 

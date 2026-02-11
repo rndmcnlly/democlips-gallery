@@ -23,6 +23,7 @@ type Bindings = {
   CLOUDFLARE_API_TOKEN: string;
   CLOUDFLARE_ACCOUNT_ID: string;
   STREAM_CUSTOMER_SUBDOMAIN: string;
+  MODERATOR_EMAILS: string;
 };
 
 type User = {
@@ -50,6 +51,7 @@ type VideoRow = {
   user_name: string;
   user_picture: string;
   user_email: string;
+  hidden: number;
   star_count: number;
   user_starred: number;
 };
@@ -59,6 +61,14 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 /** True in production (HTTPS), false on localhost (HTTP). */
 function isSecure(env: Bindings): boolean {
   return env.GOOGLE_REDIRECT_URI.startsWith("https://");
+}
+
+/** Check if the current user is a moderator (email in MODERATOR_EMAILS env var). */
+function isModerator(env: Bindings, user: User | null): boolean {
+  if (!user || !env.MODERATOR_EMAILS) return false;
+  return env.MODERATOR_EMAILS.split(",")
+    .map((e) => e.trim().toLowerCase())
+    .includes(user.email.toLowerCase());
 }
 
 // ─── HTML Helpers ───────────────────────────────────────────────
@@ -179,6 +189,19 @@ function layout(title: string, body: string, user: User | null = null): string {
     padding: 2px 8px; border-radius: 4px; cursor: pointer; float: right;
   }
   .delete-btn:hover { border-color: #e53e3e; color: #e53e3e; }
+  .hide-btn {
+    background: none; border: 1px solid #555; color: #888; font-size: 0.75rem;
+    padding: 2px 8px; border-radius: 4px; cursor: pointer; float: right;
+    margin-right: 0.25rem;
+  }
+  .hide-btn:hover { border-color: #f59e0b; color: #f59e0b; }
+  .card.hidden-card { opacity: 0.5; border-color: #e53e3e; }
+  .card.hidden-card:hover { opacity: 0.75; }
+  .hidden-label {
+    position: absolute; top: 6px; left: 6px;
+    background: #e53e3e; color: #fff; font-size: 0.7rem; font-weight: 700;
+    padding: 1px 6px; border-radius: 3px; letter-spacing: 0.05em;
+  }
   .star-btn {
     background: none; border: 1px solid #555; color: #888; font-size: 0.8rem;
     padding: 2px 8px; border-radius: 4px; cursor: pointer;
@@ -249,7 +272,7 @@ function fmtDate(iso: string): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function videoCard(v: VideoRow, streamDomain: string, currentUserId?: string): string {
+function videoCard(v: VideoRow, streamDomain: string, currentUserId?: string, moderator = false): string {
   const thumbImg = v.duration
     ? `<img src="https://customer-${streamDomain}.cloudflarestream.com/${v.id}/thumbnails/thumbnail.jpg?height=270" alt="${esc(v.title)}" loading="lazy">`
     : `<span class="processing">Processing...</span>`;
@@ -265,11 +288,17 @@ function videoCard(v: VideoRow, streamDomain: string, currentUserId?: string): s
   const starBtn = currentUserId
     ? `<button class="star-btn${starredClass}"${starDisabled} onclick="starVideo(event, '${esc(v.id)}')" title="${isOwner ? "Can't star your own clip" : "Star this clip"}"><span class="star-icon"></span><span class="star-count">${v.star_count}</span></button>`
     : "";
+  const isHidden = v.hidden === 1;
+  const hideBtn = moderator
+    ? `<button class="hide-btn" onclick="hideVideo(event, '${esc(v.id)}')" title="${isHidden ? "Unhide this clip" : "Hide this clip"}">${isHidden ? "unhide" : "hide"}</button>`
+    : "";
+  const hiddenClass = isHidden ? " hidden-card" : "";
+  const hiddenLabel = isHidden && moderator ? `<span class="hidden-label">HIDDEN</span>` : "";
 
-  return `<div class="card" id="card-${esc(v.id)}" data-star-count="${v.star_count}" data-created-at="${esc(v.created_at)}" ${v.duration ? `data-video-id="${esc(v.id)}" data-stream-domain="${esc(streamDomain)}" onclick="openPlayer(this)"` : ""} style="${v.duration ? "cursor:pointer" : ""}">
-  <div class="thumb">${thumbImg}${badge}</div>
+  return `<div class="card${hiddenClass}" id="card-${esc(v.id)}" data-star-count="${v.star_count}" data-created-at="${esc(v.created_at)}" ${v.duration ? `data-video-id="${esc(v.id)}" data-stream-domain="${esc(streamDomain)}" onclick="openPlayer(this)"` : ""} style="${v.duration ? "cursor:pointer" : ""}">
+  <div class="thumb">${thumbImg}${badge}${hiddenLabel}</div>
   <div class="info">
-    <div class="title">${deleteBtn}${esc(v.title)}</div>
+    <div class="title">${hideBtn}${deleteBtn}${esc(v.title)}</div>
     <div class="meta">
       <img src="${esc(v.user_picture || "")}" alt="">
       ${esc(v.user_name)} &middot; ${fmtDate(v.created_at)}
@@ -353,6 +382,50 @@ async function deleteVideo(e, videoId) {
     alert('Error: ' + err.message);
     btn.disabled = false;
     btn.textContent = 'delete';
+  }
+}
+
+async function hideVideo(e, videoId) {
+  e.stopPropagation();
+  var btn = e.currentTarget;
+  btn.disabled = true;
+  try {
+    var res = await fetch('/api/hide-video', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ videoId: videoId }),
+    });
+    if (!res.ok) {
+      var err = await res.json();
+      throw new Error(err.error || 'Hide failed');
+    }
+    var data = await res.json();
+    var card = document.getElementById('card-' + videoId);
+    if (card) {
+      if (data.hidden) {
+        card.classList.add('hidden-card');
+      } else {
+        card.classList.remove('hidden-card');
+      }
+    }
+    btn.textContent = data.hidden ? 'unhide' : 'hide';
+    btn.title = data.hidden ? 'Unhide this clip' : 'Hide this clip';
+    var label = card ? card.querySelector('.hidden-label') : null;
+    if (data.hidden && !label && card) {
+      var thumb = card.querySelector('.thumb');
+      if (thumb) {
+        var span = document.createElement('span');
+        span.className = 'hidden-label';
+        span.textContent = 'HIDDEN';
+        thumb.appendChild(span);
+      }
+    } else if (!data.hidden && label) {
+      label.remove();
+    }
+  } catch (err) {
+    alert('Error: ' + err.message);
+  } finally {
+    btn.disabled = false;
   }
 }
 </script>
@@ -729,6 +802,30 @@ app.post("/api/star", requireAuth, async (c) => {
   return c.json({ starred: !existing, starCount: count!.c });
 });
 
+/** Toggle hidden status on a video — moderators only. */
+app.post("/api/hide-video", requireAuth, async (c) => {
+  const user = c.var.user!;
+
+  if (!isModerator(c.env, user)) {
+    return c.json({ error: "Not authorized" }, 403);
+  }
+
+  const { videoId } = await c.req.json<{ videoId: string }>();
+  if (!videoId) return c.json({ error: "Missing videoId" }, 400);
+
+  const row = await c.env.DB.prepare("SELECT id, hidden FROM videos WHERE id = ?")
+    .bind(videoId)
+    .first<{ id: string; hidden: number }>();
+
+  if (!row) return c.json({ error: "Video not found" }, 404);
+
+  await c.env.DB.prepare("UPDATE videos SET hidden = 1 - hidden WHERE id = ?")
+    .bind(videoId)
+    .run();
+
+  return c.json({ hidden: !row.hidden });
+});
+
 // CORS preflight for TUS (tus-js-client sends OPTIONS + special headers)
 app.options("/api/tus-upload", (c) => {
   return new Response(null, {
@@ -792,15 +889,17 @@ app.get("/:courseId/:assignmentId", async (c) => {
     return c.redirect("/auth/login");
   }
 
+  const moderator = isModerator(c.env, user);
+
   const { results: videos } = await c.env.DB.prepare(
     `SELECT v.*, u.name as user_name, u.picture as user_picture, u.email as user_email,
             (SELECT COUNT(*) FROM stars s WHERE s.video_id = v.id) as star_count,
             EXISTS(SELECT 1 FROM stars s WHERE s.video_id = v.id AND s.user_id = ?) as user_starred
      FROM videos v JOIN users u ON v.user_id = u.id
-     WHERE v.course_id = ? AND v.assignment_id = ?
+     WHERE v.course_id = ? AND v.assignment_id = ? AND (v.hidden = 0 OR ?)
      ORDER BY v.created_at DESC`
   )
-    .bind(user.sub, courseId, assignmentId)
+    .bind(user.sub, courseId, assignmentId, moderator ? 1 : 0)
     .all<VideoRow>();
 
   // Backfill duration for videos still processing
@@ -819,7 +918,7 @@ app.get("/:courseId/:assignmentId", async (c) => {
   const sd = c.env.STREAM_CUSTOMER_SUBDOMAIN;
   const cards = videos.length
     ? `<div class="card-grid">${videos
-        .map((v) => videoCard(v, sd, user.sub))
+        .map((v) => videoCard(v, sd, user.sub, moderator))
         .join("")}</div>`
     : `<div class="empty-state">
         <p>No clips for this assignment yet.</p>

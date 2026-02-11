@@ -17,11 +17,14 @@
     }
   ],
 
+  "observability": { "enabled": true },
+
   // Non-secret env vars
   "vars": {
     "GOOGLE_REDIRECT_URI": "https://gallery.democlips.dev/auth/callback",
     "ALLOWED_DOMAIN": "ucsc.edu",
-    "STREAM_CUSTOMER_SUBDOMAIN": "gl9ork98qppcprc8"
+    "STREAM_CUSTOMER_SUBDOMAIN": "gl9ork98qppcprc8",
+    "MODERATOR_EMAILS": "amsmith@ucsc.edu,gbacon@ucsc.edu"
   }
 
   // Secrets (set via `wrangler secret put`):

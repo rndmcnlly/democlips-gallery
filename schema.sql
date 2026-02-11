@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS videos (
   description TEXT NOT NULL DEFAULT '',
   duration REAL,                    -- seconds, filled on first gallery view after processing
   thumbnail_pct REAL DEFAULT 0.5,
+  hidden INTEGER NOT NULL DEFAULT 0, -- 1 = hidden by moderator
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 ) STRICT;
 
