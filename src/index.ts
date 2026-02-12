@@ -1300,8 +1300,11 @@ app.get("/:courseId/:assignmentId", async (c) => {
     .bind(user.sub, courseId, assignmentId, moderator ? 1 : 0)
     .all<VideoRow>();
 
-  // Backfill duration for videos still processing
-  const pending = videos.filter((v) => v.duration === null);
+  // Backfill duration for videos still processing.
+  // Cap per page load to avoid unbounded Stream API calls + D1 writes
+  // on a single GET request. The backlog self-heals across subsequent loads.
+  const maxDurationChecksPerLoad = 10;
+  const pending = videos.filter((v) => v.duration === null).slice(0, maxDurationChecksPerLoad);
   if (pending.length > 0) {
     const updates = await refreshVideoStatus(
       c.env,
