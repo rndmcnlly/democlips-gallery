@@ -290,14 +290,15 @@ function fmtDuration(sec: number): string {
 }
 
 function fmtDate(iso: string): string {
-  const d = new Date(iso + "Z");
+  const d = new Date(iso.endsWith("Z") ? iso : iso + "Z");
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 function videoCard(v: VideoRow, streamDomain: string, currentUserId?: string, moderator = false): string {
   const thumbAlt = v.title || v.user_name;
+  const thumbTime = v.duration ? `&time=${(v.thumbnail_pct * v.duration).toFixed(1)}s` : "";
   const thumbImg = v.duration
-    ? `<img src="https://customer-${streamDomain}.cloudflarestream.com/${v.id}/thumbnails/thumbnail.jpg?height=270" alt="${esc(thumbAlt)}" loading="lazy">`
+    ? `<img src="https://customer-${streamDomain}.cloudflarestream.com/${v.id}/thumbnails/thumbnail.jpg?height=270${thumbTime}" alt="${esc(thumbAlt)}" loading="lazy">`
     : `<span class="processing">Processing...</span>`;
   const badge = v.duration
     ? `<span class="duration-badge">${fmtDuration(v.duration)}</span>`
