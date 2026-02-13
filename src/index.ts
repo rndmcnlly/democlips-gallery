@@ -218,6 +218,12 @@ function layout(title: string, body: string, user: User | null = null): string {
     display: flex; align-items: center; gap: 0.5rem;
     margin-top: 0.5rem; justify-content: space-between;
   }
+  .share-link {
+    font-size: 0.85rem; color: #555; text-decoration: none;
+    padding: 2px 4px; border-radius: 4px;
+    transition: color 0.15s;
+  }
+  .share-link:hover { color: #6cb4ee; text-decoration: none; }
   .sort-toggle {
     display: inline-flex; font-size: 0.8rem; border: 1px solid #333;
     border-radius: 6px; overflow: hidden;
@@ -344,7 +350,7 @@ function videoCard(v: VideoRow, streamDomain: string, currentUserId?: string, mo
     </div>
     ${v.description ? `<div class="desc">${esc(v.description)}</div>` : ""}
     ${urlHtml}
-    <div class="card-actions">${starBtn}</div>
+    <div class="card-actions">${starBtn}<a href="/v/${esc(v.id)}" class="share-link" onclick="event.stopPropagation()" title="Shareable link to this clip">&#128279;</a></div>
   </div>
 </div>`;
 }
@@ -1267,6 +1273,168 @@ app.get("/moderation", requireAuth, async (c) => {
     }`;
 
   return c.html(layout("Moderation", body, user));
+});
+
+/** Standalone video page: shareable link to a single clip. */
+app.get("/v/:videoId", async (c) => {
+  const user = c.var.user;
+  const videoId = c.req.param("videoId");
+
+  if (!user) {
+    setCookie(c, "return_to", c.req.path, {
+      path: "/",
+      httpOnly: true,
+      secure: isSecure(c.env),
+      sameSite: "Lax",
+      maxAge: 300,
+    });
+    return c.redirect("/auth/login");
+  }
+
+  const moderator = isModerator(c.env, user);
+
+  const video = await c.env.DB.prepare(
+    `SELECT v.*, u.name as user_name, u.picture as user_picture, u.email as user_email,
+            (SELECT COUNT(*) FROM stars s WHERE s.video_id = v.id) as star_count,
+            EXISTS(SELECT 1 FROM stars s WHERE s.video_id = v.id AND s.user_id = ?) as user_starred
+     FROM videos v JOIN users u ON v.user_id = u.id
+     WHERE v.id = ? AND (v.hidden = 0 OR ?)`
+  )
+    .bind(user.sub, videoId, moderator ? 1 : 0)
+    .first<VideoRow>();
+
+  if (!video) {
+    const body = `
+      <div class="empty-state">
+        <h1>Video not found</h1>
+        <p>This clip may have been deleted, or you may not have access.</p>
+        <p><a href="/">Go home</a></p>
+      </div>`;
+    return c.html(layout("Not Found", body, user), 404);
+  }
+
+  // Backfill duration if still processing
+  if (video.duration === null) {
+    const updates = await refreshVideoStatus(c.env, [video.id]);
+    const u = updates.get(video.id);
+    if (u) video.duration = u.duration;
+  }
+
+  const sd = c.env.STREAM_CUSTOMER_SUBDOMAIN;
+  const galleryUrl = `/${esc(video.course_id)}/${esc(video.assignment_id)}`;
+  const isOwner = video.user_id === user.sub;
+
+  const playerEmbed = video.duration
+    ? `<div style="width:100%; max-width:960px; aspect-ratio:16/9; margin:0 auto 1.5rem;">
+        <iframe
+          src="https://customer-${esc(sd)}.cloudflarestream.com/${esc(video.id)}/iframe?autoplay=true"
+          style="width:100%; height:100%; border:none; border-radius:8px;"
+          allow="autoplay; fullscreen" allowfullscreen>
+        </iframe>
+      </div>`
+    : `<div style="text-align:center; padding:3rem; color:#888; font-style:italic; background:#111; border-radius:8px; margin-bottom:1.5rem;">
+        Video is still processing&hellip; check back shortly.
+      </div>`;
+
+  const durationStr = video.duration ? ` &middot; ${fmtDuration(video.duration)}` : "";
+
+  const starredClass = video.user_starred ? " starred" : "";
+  const starDisabled = isOwner ? " disabled" : "";
+  const starBtn = `<button class="star-btn${starredClass}"${starDisabled} onclick="starVideo(event, '${esc(video.id)}')" title="${isOwner ? "Can't star your own clip" : "Star this clip"}"><span class="star-icon"></span><span class="star-count">${video.star_count}</span></button>`;
+
+  const deleteBtn = isOwner
+    ? `<button class="delete-btn" onclick="deleteVideo(event, '${esc(video.id)}')" title="Delete your clip" style="font-size:0.85rem; padding:4px 10px;">delete</button>`
+    : "";
+
+  const urlDisplay = video.url ? video.url.replace(/^https?:\/\//, "").slice(0, 60) : "";
+  const urlEllipsis = video.url && video.url.replace(/^https?:\/\//, "").length > 60 ? "..." : "";
+  const urlHtml = video.url
+    ? `<p style="margin-top:0.75rem;"><a href="${esc(video.url)}" target="_blank" rel="noopener" style="display:inline-flex; align-items:center; gap:0.3rem;">&#128279; ${esc(urlDisplay)}${urlEllipsis}</a></p>`
+    : "";
+
+  const hiddenLabel = video.hidden === 1 && moderator
+    ? `<span class="mod-badge mod-badge-warn" style="margin-left:0.5rem;">HIDDEN</span>`
+    : "";
+
+  const body = `
+    <div class="breadcrumb">
+      <a href="/">Home</a> /
+      <a href="${galleryUrl}">${esc(video.course_id)} / ${esc(video.assignment_id)}</a> /
+      clip
+    </div>
+    ${playerEmbed}
+    <div style="max-width:960px; margin:0 auto;">
+      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
+        <div>
+          ${video.title ? `<h1 style="margin:0 0 0.25rem;">${esc(video.title)}${hiddenLabel}</h1>` : `<h1 style="margin:0 0 0.25rem; color:#888; font-style:italic;">Untitled clip${hiddenLabel}</h1>`}
+          <div style="color:#888; font-size:0.9rem; display:flex; align-items:center; gap:0.5rem;">
+            <img src="${esc(video.user_picture || "")}" style="width:22px; height:22px; border-radius:50%;" alt="">
+            ${esc(video.user_name)} &middot; ${fmtDate(video.created_at)}${durationStr}
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:0.5rem;">
+          ${starBtn}
+          ${deleteBtn}
+        </div>
+      </div>
+      ${video.description ? `<p style="color:#aaa; margin-top:0.75rem;">${esc(video.description)}</p>` : ""}
+      ${urlHtml}
+      <p style="margin-top:1.5rem;">
+        <a href="${galleryUrl}" style="color:#6cb4ee;">&larr; Back to assignment gallery</a>
+      </p>
+    </div>
+    <script>
+    async function starVideo(e, videoId) {
+      e.stopPropagation();
+      var btn = e.currentTarget;
+      if (btn.disabled) return;
+      btn.disabled = true;
+      try {
+        var res = await fetch('/api/star', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoId: videoId }),
+        });
+        if (!res.ok) {
+          var err = await res.json();
+          throw new Error(err.error || 'Star failed');
+        }
+        var data = await res.json();
+        btn.classList.toggle('starred', data.starred);
+        btn.querySelector('.star-count').textContent = data.starCount;
+      } catch (err) {
+        alert('Error: ' + err.message);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function deleteVideo(e, videoId) {
+      e.stopPropagation();
+      if (!confirm('Delete this clip? This cannot be undone.')) return;
+      var btn = e.target;
+      btn.disabled = true;
+      btn.textContent = '...';
+      try {
+        var res = await fetch('/api/delete-video', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoId: videoId }),
+        });
+        if (!res.ok) {
+          var err = await res.json();
+          throw new Error(err.error || 'Delete failed');
+        }
+        window.location.href = '${galleryUrl}';
+      } catch (err) {
+        alert('Error: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = 'delete';
+      }
+    }
+    </script>`;
+
+  return c.html(layout(video.title || "Clip", body, user));
 });
 
 /** Assignment gallery: view all clips for a course/assignment, with upload link. */
