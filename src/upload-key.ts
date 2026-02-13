@@ -57,17 +57,20 @@ uploadKeyRoutes.post("/api/create-upload-key", requireAuth, async (c) => {
 
   const token = await sign(claims, c.env.JWT_SECRET, "HS256");
 
-  // Build the full upload URL — usable as a TUS endpoint or plain POST target
+  // Build the full upload URL — POST a file here, or point a TUS client at it
   const origin = new URL(c.req.url).origin;
-  const uploadUrl = `${origin}/k/${token}`;
+  const url = `${origin}/k/${token}`;
 
-  return c.json({ key: token, url: uploadUrl, expiresIn: "24h" });
+  return c.json({ key: token, url, expiresIn: "24h" });
 });
 
 /**
- * TUS upload via upload key — same as /api/tus-upload but authenticated by
- * the JWT in the URL instead of a session cookie. External TUS clients
- * (OBS, tus-js-client in another app) point at this URL directly.
+ * Upload via upload key — single endpoint for both plain POST and TUS clients.
+ * If the request carries a Tus-Resumable header, treat it as a TUS session
+ * initiation; otherwise read the body as a plain file upload.
+ *
+ *   curl -X POST -H "Content-Type: video/mp4" --data-binary @clip.mp4 \
+ *        https://gallery.democlips.dev/k/<token>
  */
 uploadKeyRoutes.post("/k/:key", async (c) => {
   const claims = await verifyUploadKey(c.req.param("key"), c.env.JWT_SECRET);
@@ -75,44 +78,34 @@ uploadKeyRoutes.post("/k/:key", async (c) => {
     return c.json({ error: "Invalid or expired upload key" }, 401);
   }
 
-  const uploadLength = c.req.header("Upload-Length") || "0";
-  const result = await initiateStreamUpload(
-    c.env,
-    claims.sub,
-    claims.email,
-    claims.courseId,
-    claims.assignmentId,
-    uploadLength
-  );
+  // ── TUS path: client sent Tus-Resumable header ──────────────────
+  if (c.req.header("Tus-Resumable")) {
+    const uploadLength = c.req.header("Upload-Length") || "0";
+    const result = await initiateStreamUpload(
+      c.env,
+      claims.sub,
+      claims.email,
+      claims.courseId,
+      claims.assignmentId,
+      uploadLength
+    );
 
-  if ("error" in result) {
-    return c.json({ error: result.error }, result.status as 500);
+    if ("error" in result) {
+      return c.json({ error: result.error }, result.status as 500);
+    }
+
+    return new Response(null, {
+      status: 201,
+      headers: {
+        "Tus-Resumable": "1.0.0",
+        Location: result.location,
+        "Access-Control-Expose-Headers": "Location, Tus-Resumable",
+        "Access-Control-Allow-Origin": "*",
+      },
+    });
   }
 
-  return new Response(null, {
-    status: 201,
-    headers: {
-      "Tus-Resumable": "1.0.0",
-      Location: result.location,
-      "Access-Control-Expose-Headers": "Location, Tus-Resumable",
-      "Access-Control-Allow-Origin": "*",
-    },
-  });
-});
-
-/**
- * Plain file upload via upload key — for dumb HTTP clients (Unity, curl, etc.)
- * that can't speak TUS. POST the raw file body and the server handles everything.
- *
- *   curl -X POST -H "Content-Type: video/mp4" --data-binary @clip.mp4 \
- *        https://gallery.democlips.dev/k/<token>/upload
- */
-uploadKeyRoutes.post("/k/:key/upload", async (c) => {
-  const claims = await verifyUploadKey(c.req.param("key"), c.env.JWT_SECRET);
-  if (!claims) {
-    return c.json({ error: "Invalid or expired upload key" }, 401);
-  }
-
+  // ── Plain upload path: raw file body ────────────────────────────
   const body = await c.req.arrayBuffer();
   if (!body || body.byteLength === 0) {
     return c.json({ error: "Empty request body — POST the video file as the request body" }, 400);
@@ -172,7 +165,7 @@ uploadKeyRoutes.post("/k/:key/upload", async (c) => {
   return c.json({ ok: true, videoId });
 });
 
-// CORS preflight for upload key endpoints
+// CORS preflight for upload key endpoint
 uploadKeyRoutes.options("/k/:key", (c) => {
   return new Response(null, {
     status: 204,
@@ -181,18 +174,6 @@ uploadKeyRoutes.options("/k/:key", (c) => {
       "Access-Control-Allow-Methods": "POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, Upload-Length, Upload-Metadata, Tus-Resumable",
       "Access-Control-Expose-Headers": "Location, Tus-Resumable",
-      "Access-Control-Max-Age": "86400",
-    },
-  });
-});
-
-uploadKeyRoutes.options("/k/:key/upload", (c) => {
-  return new Response(null, {
-    status: 204,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
       "Access-Control-Max-Age": "86400",
     },
   });

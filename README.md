@@ -138,8 +138,7 @@ npx wrangler d1 execute democlips-gallery --remote --file=schema.sql
 | `/api/star` | Toggle a star on a video (no self-starring) |
 | `/api/hide-video` | Toggle hide/unhide on a video (moderators only) |
 | `/api/create-upload-key` | Generate a 24h upload key JWT (authenticated) |
-| `/k/{jwt}` | TUS upload via upload key (no session needed) |
-| `/k/{jwt}/upload` | Plain POST upload via upload key (for scripts) |
+| `/k/{jwt}` | Upload via upload key — plain POST or TUS (no session needed) |
 
 Instructors share a direct link like `https://gallery.democlips.dev/12345/1`
 with students. There's no course/assignment creation step — the URL structure
@@ -180,19 +179,16 @@ it into an external tool (OBS, a Unity script, curl, etc.). The link is a
 stateless JWT signed with the same `JWT_SECRET`, encoding the user's identity
 and the target course/assignment. No extra database table required.
 
-Two endpoints per key:
-
-| Endpoint | Use case |
-|---|---|
-| `POST /k/<jwt>` | TUS-compatible upload initiation (for TUS clients) |
-| `POST /k/<jwt>/upload` | Plain file POST (for simple scripts) |
+A single endpoint handles both protocols — if the request carries a
+`Tus-Resumable` header it's treated as a TUS session initiation; otherwise
+the body is read as a plain file upload.
 
 Example with curl:
 
 ```bash
 curl -X POST -H "Content-Type: video/mp4" \
      --data-binary @clip.mp4 \
-     https://gallery.democlips.dev/k/<jwt>/upload
+     https://gallery.democlips.dev/k/<jwt>
 ```
 
 Keys expire after 24 hours. Each upload replaces the student's existing clip
