@@ -4,10 +4,10 @@ Instructions for AI coding agents working in this repository.
 
 ## Project Overview
 
-Single-file Cloudflare Worker (Hono) serving a video gallery for UCSC game
-dev students. Google OAuth restricted to @ucsc.edu. Videos stored on
-Cloudflare Stream, metadata in D1 (SQLite). See `README.md` for full
-architecture and deployment docs.
+Cloudflare Worker (Hono) serving a video gallery for UCSC game dev students.
+Google OAuth restricted to @ucsc.edu. Videos stored on Cloudflare Stream,
+metadata in D1 (SQLite). See `README.md` for full architecture and
+deployment docs.
 
 ## Commands
 
@@ -28,28 +28,56 @@ is the only automated validation. Run it before suggesting a deploy.
 ## Project Structure
 
 ```
-src/index.ts         — THE ENTIRE APP (single file, ~850 lines)
-schema.sql           — D1 schema (users + videos tables)
+src/
+  index.ts           — App creation, global middleware, route mounting (~30 lines)
+  types.ts           — Shared types (Bindings, User, VideoRow, etc.) + isSecure, isModerator
+  html.ts            — layout(), esc(), videoCard(), playerScript(), formatting helpers
+  auth.ts            — softAuth middleware, requireAuth guard, /auth/* routes
+  stream.ts          — streamAPI(), refreshVideoStatus(), initiateStreamUpload()
+  api.ts             — /api/* JSON endpoints (TUS upload, delete, star, hide, update, CORS)
+  upload-key.ts      — Upload key JWT logic + /api/create-upload-key, /k/:key routes
+  pages.ts           — All HTML page routes (home, onboarding, moderation, gallery, upload, 404)
+
+schema.sql           — D1 schema (users, videos, stars tables)
 wrangler.jsonc       — Worker config, D1 binding, env vars
 .dev.vars.example    — Template for local secrets
 .dev.vars            — Actual local secrets (gitignored)
 ```
 
-**This is intentionally a single-file app.** Do not split it into multiple
-modules unless explicitly asked. The file is organized in labeled sections:
+### Module Dependency Graph
 
-1. Types
-2. HTML Helpers (layout, esc, videoCard, playerScript)
-3. Auth Middleware (soft global + hard requireAuth guard)
-4. Auth Routes (/auth/login, /auth/callback, /auth/logout, /auth/me)
-5. Stream API Helpers
-6. API Routes (/api/tus-upload, /api/delete-video)
-7. Page Routes (/, /:courseId/:assignmentId, .../upload)
-8. 404
-9. Export
+```
+index.ts
+  ├── types.ts        (Bindings, Variables)
+  ├── auth.ts         (softAuth, authRoutes)
+  │     └── types.ts  (Bindings, Variables, User, isSecure)
+  ├── api.ts          (apiRoutes)
+  │     ├── types.ts  (Bindings, Variables, isModerator)
+  │     ├── auth.ts   (requireAuth)
+  │     └── stream.ts (streamAPI, initiateStreamUpload)
+  ├── upload-key.ts   (uploadKeyRoutes)
+  │     ├── types.ts  (Bindings, Variables, UploadKeyClaims)
+  │     ├── auth.ts   (requireAuth)
+  │     └── stream.ts (streamAPI, initiateStreamUpload)
+  └── pages.ts        (pageRoutes)
+        ├── types.ts  (Bindings, Variables, VideoRow, isSecure, isModerator)
+        ├── html.ts   (layout, esc, fmtDuration, fmtDate, videoCard, playerScript)
+        ├── auth.ts   (requireAuth)
+        └── stream.ts (refreshVideoStatus)
+```
 
-When adding features, place code in the appropriate section. Follow the
-existing section header style: `// ─── Section Name ───────────────...`
+### Where to Put New Code
+
+- **New type**: `src/types.ts`
+- **New API route**: `src/api.ts` (or `src/upload-key.ts` if related to upload keys)
+- **New page**: `src/pages.ts`
+- **New HTML component or CSS**: `src/html.ts`
+- **New Stream API interaction**: `src/stream.ts`
+- **Auth changes**: `src/auth.ts`
+- **New middleware**: `src/index.ts` (global) or the relevant route file (scoped)
+
+Each file has labeled section headers (`// ─── Section Name ───...`).
+Follow the existing style when adding new sections.
 
 ## Code Style
 
@@ -70,15 +98,16 @@ existing section header style: `// ─── Section Name ───────�
 
 ### Imports
 
-- Named imports from `hono`, `hono/jwt`, `hono/cookie` only.
-- No relative imports (single file). No `import type`.
+- Named imports from `hono`, `hono/jwt`, `hono/cookie`.
+- Relative imports between `src/` modules use `./name` (no extension).
+- All shared types come from `./types`. Do not re-declare types locally.
 - Cloudflare Workers globals (`D1Database`, `crypto`, `fetch`, `atob`, `btoa`)
   are available without imports via `@cloudflare/workers-types`.
 
 ### HTML Rendering
 
 - All HTML is server-rendered via template literals. No JSX, no React.
-- Use `layout(title, body, user)` to wrap page content.
+- Use `layout(title, body, user)` to wrap page content (from `./html`).
 - **Always escape user-supplied strings** with `esc()` in templates.
 - Client-side JS uses `var` (not const/let) and function declarations.
 - External client JS: `tus-js-client@4` loaded from jsDelivr CDN (upload page).
@@ -86,12 +115,26 @@ existing section header style: `// ─── Section Name ───────�
 
 ## Hono Patterns
 
+### Route Mounting
+
+Routes are organized as separate Hono apps and mounted in `index.ts`:
+
+```typescript
+app.route("/auth", authRoutes);   // auth.ts handles /auth/login, etc.
+app.route("/api", apiRoutes);     // api.ts handles /api/tus-upload, etc.
+app.route("/", uploadKeyRoutes);  // upload-key.ts handles /k/:key, /api/create-upload-key
+app.route("/", pageRoutes);       // pages.ts handles /, /v/:id, /:course/:assignment, etc.
+```
+
+Each route module creates its own `new Hono<{ Bindings; Variables }>()`.
+The soft auth middleware runs globally in `index.ts`, so `c.var.user`
+is always available in every route module.
+
 ### Bindings & Environment
 
 ```typescript
-const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 // Access via c.env.DB, c.env.GOOGLE_CLIENT_ID, etc.
-// Per-request state via c.var.user (set by soft auth middleware)
+// Per-request state via c.var.user (set by soft auth middleware in index.ts)
 ```
 
 ### Route Definitions
@@ -133,7 +176,8 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
   from the browser to Cloudflare Stream.
 - Video duration is lazily backfilled from the Stream API on gallery
   page loads (videos with `duration IS NULL`).
-- Stream API accessed via `streamAPI(env, path, method, body)` helper.
+- Stream API accessed via `streamAPI(env, path, method, body)` helper
+  in `src/stream.ts`.
 - No Stream Worker binding exists — it's all REST API with bearer token.
 
 ## Local vs. Production
@@ -159,12 +203,15 @@ The value in `wrangler.jsonc` is the production URL — do not change it.
 
 ## Common Tasks
 
-**Add a new API route**: Add to the "API Routes" section. Use `requireAuth`
-middleware. Return JSON. Check ownership for any mutation.
+**Add a new API route**: Add to `src/api.ts`. Use `requireAuth` middleware.
+Return JSON. Check ownership for any mutation.
 
-**Add a new page**: Add to the "Page Routes" section. Use `layout()` for
-HTML. Add video player support with `playerScript()` if showing videos.
+**Add a new page**: Add to `src/pages.ts`. Use `layout()` for HTML.
+Add video player support with `playerScript()` if showing videos.
+
+**Add a new HTML component**: Add to `src/html.ts`. Export the function
+and import it where needed.
 
 **Change the DB schema**: Edit `schema.sql`, run both `db:migrate:local`
-and `db:migrate` (remote), then update the relevant TypeScript types and
-queries in `src/index.ts`.
+and `db:migrate` (remote), then update the relevant TypeScript types in
+`src/types.ts` and queries in the appropriate route file.
