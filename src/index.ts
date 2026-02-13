@@ -38,6 +38,15 @@ type Variables = {
   user: User | null;
 };
 
+type UploadKeyClaims = {
+  sub: string;          // user ID (Google 'sub')
+  email: string;        // for Upload-Creator on Stream
+  courseId: string;
+  assignmentId: string;
+  purpose: "upload-key"; // distinguishes from session JWTs
+  exp: number;
+};
+
 type VideoRow = {
   id: string;
   user_id: string;
@@ -815,59 +824,17 @@ app.post("/api/tus-upload", requireAuth, async (c) => {
     return c.json({ error: "Missing courseId or assignmentId in Upload-Metadata" }, 400);
   }
 
-  // One clip per student per assignment — auto-replace any existing clip
-  const existing = await c.env.DB.prepare(
-    "SELECT id FROM videos WHERE user_id = ? AND course_id = ? AND assignment_id = ?"
-  )
-    .bind(user.sub, courseId, assignmentId)
-    .first<{ id: string }>();
-
-  if (existing) {
-    // Delete old video from Stream (best-effort) and D1
-    await streamAPI(c.env, `/${existing.id}`, "DELETE").catch(() => {});
-    await c.env.DB.prepare("DELETE FROM videos WHERE id = ?").bind(existing.id).run();
-  }
-
-  // Build the Upload-Metadata for Stream (add our constraints)
-  const streamMeta = [
-    `maxDurationSeconds ${btoa("600")}`,
-    `expiry ${btoa(new Date(Date.now() + 3600_000).toISOString())}`,
-    `allowedorigins ${btoa("gallery.democlips.dev,localhost:8787")}`,
-  ].join(",");
-
-  // Initiate TUS upload on Stream (direct_user=true means client uploads directly)
-  const res = await fetch(
-    `https://api.cloudflare.com/client/v4/accounts/${c.env.CLOUDFLARE_ACCOUNT_ID}/stream?direct_user=true`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${c.env.CLOUDFLARE_API_TOKEN}`,
-        "Tus-Resumable": "1.0.0",
-        "Upload-Length": c.req.header("Upload-Length") || "0",
-        "Upload-Metadata": streamMeta,
-        "Upload-Creator": user.email,
-      },
-    }
+  const result = await initiateStreamUpload(
+    c.env,
+    user.sub,
+    user.email,
+    courseId,
+    assignmentId,
+    c.req.header("Upload-Length") || "0"
   );
 
-  const location = res.headers.get("Location");
-  if (!location) {
-    const body = await res.text();
-    return c.json({ error: "Failed to create TUS upload", details: body }, 500);
-  }
-
-  // Extract the Stream video UID from the location URL
-  // Location looks like: https://upload.cloudflarestream.com/tus/VIDEOUID...
-  const videoId = res.headers.get("stream-media-id") || location.split("/").pop()?.split("?")[0] || "";
-
-  // Insert video record in D1 — no metadata required yet, student can add it later
-  if (videoId) {
-    await c.env.DB.prepare(
-      `INSERT INTO videos (id, user_id, course_id, assignment_id, title, description, url)
-       VALUES (?, ?, ?, ?, '', '', '')`
-    )
-      .bind(videoId, user.sub, courseId, assignmentId)
-      .run();
+  if ("error" in result) {
+    return c.json({ error: result.error }, result.status as 500);
   }
 
   // Return the Location to the tus-js-client so it uploads directly to Stream
@@ -875,7 +842,7 @@ app.post("/api/tus-upload", requireAuth, async (c) => {
     status: 201,
     headers: {
       "Tus-Resumable": "1.0.0",
-      Location: location,
+      Location: result.location,
       "Access-Control-Expose-Headers": "Location, Tus-Resumable",
       "Access-Control-Allow-Origin": "*",
     },
@@ -1014,6 +981,263 @@ app.options("/api/tus-upload", (c) => {
       "Access-Control-Allow-Methods": "POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, Upload-Length, Upload-Metadata, Tus-Resumable",
       "Access-Control-Expose-Headers": "Location, Tus-Resumable",
+      "Access-Control-Max-Age": "86400",
+    },
+  });
+});
+
+// ─── Upload Key Routes ──────────────────────────────────────────
+//
+// Upload keys are stateless JWTs signed with the same JWT_SECRET used for
+// session cookies. They encode the user, course, and assignment so that
+// external tools (OBS, Unity scripts, etc.) can upload without a browser
+// session. The JWT's `purpose` claim distinguishes them from session tokens.
+
+/**
+ * Generate an upload key — a signed JWT URL the student can paste into
+ * an external tool. The key is scoped to one course+assignment and expires
+ * in 24 hours.
+ */
+app.post("/api/create-upload-key", requireAuth, async (c) => {
+  const user = c.var.user!;
+  const { courseId, assignmentId } = await c.req.json<{
+    courseId: string;
+    assignmentId: string;
+  }>();
+
+  if (!courseId || !assignmentId) {
+    return c.json({ error: "Missing courseId or assignmentId" }, 400);
+  }
+
+  const claims: UploadKeyClaims = {
+    sub: user.sub,
+    email: user.email,
+    courseId,
+    assignmentId,
+    purpose: "upload-key",
+    exp: Math.floor(Date.now() / 1000) + 86400, // 24h
+  };
+
+  const token = await sign(claims, c.env.JWT_SECRET, "HS256");
+
+  // Build the full upload URL — usable as a TUS endpoint or plain POST target
+  const origin = new URL(c.req.url).origin;
+  const uploadUrl = `${origin}/k/${token}`;
+
+  return c.json({ key: token, url: uploadUrl, expiresIn: "24h" });
+});
+
+/**
+ * Verify an upload key JWT and return the claims. Rejects expired or
+ * malformed tokens, and tokens that aren't upload keys (e.g. session JWTs).
+ */
+async function verifyUploadKey(
+  token: string,
+  secret: string
+): Promise<UploadKeyClaims | null> {
+  try {
+    const payload = (await verify(token, secret, "HS256")) as unknown as UploadKeyClaims;
+    if (payload.purpose !== "upload-key") return null;
+    if (!payload.sub || !payload.courseId || !payload.assignmentId) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Shared logic: replace any existing clip, create a TUS session on Stream,
+ * insert the D1 record, and return the Stream Location URL + video ID.
+ */
+async function initiateStreamUpload(
+  env: Bindings,
+  userId: string,
+  email: string,
+  courseId: string,
+  assignmentId: string,
+  uploadLength: string
+): Promise<{ location: string; videoId: string } | { error: string; status: number }> {
+  // One clip per student per assignment — auto-replace any existing clip
+  const existing = await env.DB.prepare(
+    "SELECT id FROM videos WHERE user_id = ? AND course_id = ? AND assignment_id = ?"
+  )
+    .bind(userId, courseId, assignmentId)
+    .first<{ id: string }>();
+
+  if (existing) {
+    await streamAPI(env, `/${existing.id}`, "DELETE").catch(() => {});
+    await env.DB.prepare("DELETE FROM videos WHERE id = ?").bind(existing.id).run();
+  }
+
+  const streamMeta = [
+    `maxDurationSeconds ${btoa("600")}`,
+    `expiry ${btoa(new Date(Date.now() + 3600_000).toISOString())}`,
+    `allowedorigins ${btoa("gallery.democlips.dev,localhost:8787")}`,
+  ].join(",");
+
+  const res = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/stream?direct_user=true`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}`,
+        "Tus-Resumable": "1.0.0",
+        "Upload-Length": uploadLength,
+        "Upload-Metadata": streamMeta,
+        "Upload-Creator": email,
+      },
+    }
+  );
+
+  const location = res.headers.get("Location");
+  if (!location) {
+    const body = await res.text();
+    return { error: `Failed to create TUS upload: ${body}`, status: 500 };
+  }
+
+  const videoId = res.headers.get("stream-media-id") || location.split("/").pop()?.split("?")[0] || "";
+
+  if (videoId) {
+    await env.DB.prepare(
+      `INSERT INTO videos (id, user_id, course_id, assignment_id, title, description, url)
+       VALUES (?, ?, ?, ?, '', '', '')`
+    )
+      .bind(videoId, userId, courseId, assignmentId)
+      .run();
+  }
+
+  return { location, videoId };
+}
+
+/**
+ * TUS upload via upload key — same as /api/tus-upload but authenticated by
+ * the JWT in the URL instead of a session cookie. External TUS clients
+ * (OBS, tus-js-client in another app) point at this URL directly.
+ */
+app.post("/k/:key", async (c) => {
+  const claims = await verifyUploadKey(c.req.param("key"), c.env.JWT_SECRET);
+  if (!claims) {
+    return c.json({ error: "Invalid or expired upload key" }, 401);
+  }
+
+  const uploadLength = c.req.header("Upload-Length") || "0";
+  const result = await initiateStreamUpload(
+    c.env,
+    claims.sub,
+    claims.email,
+    claims.courseId,
+    claims.assignmentId,
+    uploadLength
+  );
+
+  if ("error" in result) {
+    return c.json({ error: result.error }, result.status as 500);
+  }
+
+  return new Response(null, {
+    status: 201,
+    headers: {
+      "Tus-Resumable": "1.0.0",
+      Location: result.location,
+      "Access-Control-Expose-Headers": "Location, Tus-Resumable",
+      "Access-Control-Allow-Origin": "*",
+    },
+  });
+});
+
+/**
+ * Plain file upload via upload key — for dumb HTTP clients (Unity, curl, etc.)
+ * that can't speak TUS. POST the raw file body and the server handles everything.
+ *
+ *   curl -X POST -H "Content-Type: video/mp4" --data-binary @clip.mp4 \
+ *        https://gallery.democlips.dev/k/<token>/upload
+ */
+app.post("/k/:key/upload", async (c) => {
+  const claims = await verifyUploadKey(c.req.param("key"), c.env.JWT_SECRET);
+  if (!claims) {
+    return c.json({ error: "Invalid or expired upload key" }, 401);
+  }
+
+  const body = await c.req.arrayBuffer();
+  if (!body || body.byteLength === 0) {
+    return c.json({ error: "Empty request body — POST the video file as the request body" }, 400);
+  }
+
+  // One clip per student per assignment — auto-replace any existing clip
+  const existing = await c.env.DB.prepare(
+    "SELECT id FROM videos WHERE user_id = ? AND course_id = ? AND assignment_id = ?"
+  )
+    .bind(claims.sub, claims.courseId, claims.assignmentId)
+    .first<{ id: string }>();
+
+  if (existing) {
+    await streamAPI(c.env, `/${existing.id}`, "DELETE").catch(() => {});
+    await c.env.DB.prepare("DELETE FROM videos WHERE id = ?").bind(existing.id).run();
+  }
+
+  // Use the Stream direct-upload JSON API (not TUS) for a single-shot upload
+  const formData = new FormData();
+  const contentType = c.req.header("Content-Type") || "video/mp4";
+  const blob = new Blob([body], { type: contentType });
+  formData.append("file", blob, "upload.mp4");
+  formData.append("maxDurationSeconds", "600");
+  formData.append("creator", claims.email);
+
+  const res = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${c.env.CLOUDFLARE_ACCOUNT_ID}/stream`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${c.env.CLOUDFLARE_API_TOKEN}`,
+      },
+      body: formData,
+    }
+  );
+
+  const data = (await res.json()) as {
+    success: boolean;
+    result?: { uid: string };
+    errors?: { message: string }[];
+  };
+
+  if (!data.success || !data.result?.uid) {
+    const msg = data.errors?.map((e) => e.message).join(", ") || "Unknown Stream error";
+    return c.json({ error: `Stream upload failed: ${msg}` }, 500);
+  }
+
+  const videoId = data.result.uid;
+
+  await c.env.DB.prepare(
+    `INSERT INTO videos (id, user_id, course_id, assignment_id, title, description, url)
+     VALUES (?, ?, ?, ?, '', '', '')`
+  )
+    .bind(videoId, claims.sub, claims.courseId, claims.assignmentId)
+    .run();
+
+  return c.json({ ok: true, videoId });
+});
+
+// CORS preflight for upload key endpoints
+app.options("/k/:key", (c) => {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Upload-Length, Upload-Metadata, Tus-Resumable",
+      "Access-Control-Expose-Headers": "Location, Tus-Resumable",
+      "Access-Control-Max-Age": "86400",
+    },
+  });
+});
+
+app.options("/k/:key/upload", (c) => {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
       "Access-Control-Max-Age": "86400",
     },
   });
@@ -1574,11 +1798,75 @@ app.get(
       </div>
     </div>
 
+    <div style="margin-top:2.5rem; border-top:1px solid #2a2a4a; padding-top:1.5rem;">
+      <h2 style="font-size:1rem; color:#ccc; margin:0 0 0.5rem;">Upload from an external tool</h2>
+      <p style="color:#888; font-size:0.85rem; margin:0 0 0.75rem;">
+        Generate a temporary upload link you can paste into OBS, a Unity script,
+        or any tool that can POST a video file. The link is tied to your account
+        and this assignment, and expires in 24 hours.
+      </p>
+      <button class="btn btn-primary" id="gen-key-btn" onclick="generateKey()" style="font-size:0.85rem; padding:0.4rem 1rem;">Generate upload link</button>
+      <div id="key-result" style="display:none; margin-top:0.75rem;">
+        <label style="display:block; font-size:0.8rem; color:#888; margin-bottom:0.25rem;">TUS endpoint (for TUS-compatible tools)</label>
+        <div style="background:#111; border:1px solid #333; border-radius:6px; padding:0.5rem 0.75rem; display:flex; align-items:center; gap:0.5rem;">
+          <code id="key-tus-url" style="flex:1; word-break:break-all; color:#6cb4ee; font-size:0.8rem;"></code>
+          <button onclick="copyText('key-tus-url', this)" class="btn btn-primary" style="flex-shrink:0; font-size:0.75rem; padding:0.25rem 0.5rem;">Copy</button>
+        </div>
+        <label style="display:block; font-size:0.8rem; color:#888; margin-top:0.75rem; margin-bottom:0.25rem;">Simple POST endpoint (for scripts &mdash; POST the file as the request body)</label>
+        <div style="background:#111; border:1px solid #333; border-radius:6px; padding:0.5rem 0.75rem; display:flex; align-items:center; gap:0.5rem;">
+          <code id="key-post-url" style="flex:1; word-break:break-all; color:#6cb4ee; font-size:0.8rem;"></code>
+          <button onclick="copyText('key-post-url', this)" class="btn btn-primary" style="flex-shrink:0; font-size:0.75rem; padding:0.25rem 0.5rem;">Copy</button>
+        </div>
+        <details style="margin-top:0.75rem;">
+          <summary style="color:#888; font-size:0.8rem; cursor:pointer;">Example: upload with curl</summary>
+          <pre style="background:#111; border:1px solid #333; border-radius:6px; padding:0.5rem 0.75rem; font-size:0.75rem; color:#aaa; overflow-x:auto; margin-top:0.5rem;"><code id="key-curl-example"></code></pre>
+        </details>
+        <p style="color:#666; font-size:0.8rem; margin-top:0.5rem;">Expires in 24 hours. Uploading replaces any existing clip.</p>
+      </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/tus-js-client@4/dist/tus.min.js"></script>
     <script>
     var videoId = null;
     var galleryUrl = '${galleryUrl}';
     var uploadDone = false;
+
+    function copyText(elementId, btn) {
+      var text = document.getElementById(elementId).textContent;
+      navigator.clipboard.writeText(text).then(function() {
+        var orig = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(function() { btn.textContent = orig; }, 1500);
+      });
+    }
+
+    function generateKey() {
+      var btn = document.getElementById('gen-key-btn');
+      btn.disabled = true;
+      btn.textContent = 'Generating...';
+
+      fetch('/api/create-upload-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ courseId: '${esc(courseId)}', assignmentId: '${esc(assignmentId)}' }),
+      })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.error) { alert('Error: ' + data.error); btn.disabled = false; btn.textContent = 'Generate upload link'; return; }
+          document.getElementById('key-tus-url').textContent = data.url;
+          document.getElementById('key-post-url').textContent = data.url + '/upload';
+          document.getElementById('key-curl-example').textContent =
+            'curl -X POST -H "Content-Type: video/mp4" \\\n     --data-binary @your-video.mp4 \\\n     ' + data.url + '/upload';
+          document.getElementById('key-result').style.display = 'block';
+          btn.textContent = 'Regenerate upload link';
+          btn.disabled = false;
+        })
+        .catch(function(err) {
+          alert('Error: ' + err.message);
+          btn.disabled = false;
+          btn.textContent = 'Generate upload link';
+        });
+    }
 
     var fileInput = document.getElementById('file');
     fileInput.addEventListener('change', function() {

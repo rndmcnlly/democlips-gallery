@@ -137,6 +137,9 @@ npx wrangler d1 execute democlips-gallery --remote --file=schema.sql
 | `/api/delete-video` | Delete a video (owner only) |
 | `/api/star` | Toggle a star on a video (no self-starring) |
 | `/api/hide-video` | Toggle hide/unhide on a video (moderators only) |
+| `/api/create-upload-key` | Generate a 24h upload key JWT (authenticated) |
+| `/k/{jwt}` | TUS upload via upload key (no session needed) |
+| `/k/{jwt}/upload` | Plain POST upload via upload key (for scripts) |
 
 Instructors share a direct link like `https://gallery.democlips.dev/12345/1`
 with students. There's no course/assignment creation step — the URL structure
@@ -169,6 +172,31 @@ Browser                     Worker                        Cloudflare Stream
 Video files go directly from the browser to Stream via the TUS resumable
 upload protocol (50MB chunks, auto-retry). They never pass through the Worker,
 so there's no size limit issue. We allow up to 500MB / 10 min per clip.
+
+### Upload Keys (external tool uploads)
+
+Students can generate a temporary upload link from the upload page and paste
+it into an external tool (OBS, a Unity script, curl, etc.). The link is a
+stateless JWT signed with the same `JWT_SECRET`, encoding the user's identity
+and the target course/assignment. No extra database table required.
+
+Two endpoints per key:
+
+| Endpoint | Use case |
+|---|---|
+| `POST /k/<jwt>` | TUS-compatible upload initiation (for TUS clients) |
+| `POST /k/<jwt>/upload` | Plain file POST (for simple scripts) |
+
+Example with curl:
+
+```bash
+curl -X POST -H "Content-Type: video/mp4" \
+     --data-binary @clip.mp4 \
+     https://gallery.democlips.dev/k/<jwt>/upload
+```
+
+Keys expire after 24 hours. Each upload replaces the student's existing clip
+for that assignment (same one-clip-per-student constraint).
 
 ### Auth
 
