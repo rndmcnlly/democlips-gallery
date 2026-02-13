@@ -1500,7 +1500,7 @@ app.get("/moderation", requireAuth, async (c) => {
 });
 
 /** Standalone video page: shareable link to a single clip. */
-app.get("/v/:videoId", async (c) => {
+app.get("/v/:videoId{[0-9a-fA-F-]+}", async (c) => {
   const user = c.var.user;
   const videoId = c.req.param("videoId");
 
@@ -1662,7 +1662,7 @@ app.get("/v/:videoId", async (c) => {
 });
 
 /** Assignment gallery: view all clips for a course/assignment, with upload link. */
-app.get("/:courseId/:assignmentId", async (c) => {
+app.get("/:courseId{[0-9a-fA-F-]+}/:assignmentId{[0-9a-fA-F-]+}", async (c) => {
   const user = c.var.user;
   const courseId = c.req.param("courseId");
   const assignmentId = c.req.param("assignmentId");
@@ -1743,7 +1743,7 @@ app.get("/:courseId/:assignmentId", async (c) => {
 
 /** Upload page for a specific assignment. */
 app.get(
-  "/:courseId/:assignmentId/upload",
+  "/:courseId{[0-9a-fA-F-]+}/:assignmentId{[0-9a-fA-F-]+}/upload",
   requireAuth,
   async (c) => {
     const courseId = c.req.param("courseId");
