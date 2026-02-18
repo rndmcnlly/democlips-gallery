@@ -341,6 +341,9 @@ pageRoutes.get("/v/:videoId{[0-9a-fA-F-]+}", async (c) => {
   const starDisabled = isOwner ? " disabled" : "";
   const starBtn = `<button class="star-btn${starredClass}"${starDisabled} onclick="starVideo(event, '${esc(video.id)}')" title="${isOwner ? "Can't star your own clip" : "Star this clip"}"><span class="star-icon"></span><span class="star-count">${video.star_count}</span></button>`;
 
+  const editBtn = isOwner
+    ? `<button class="delete-btn" onclick="openEdit()" title="Edit clip details" style="font-size:0.85rem; padding:4px 10px; margin-right:0.25rem;">edit</button>`
+    : "";
   const deleteBtn = isOwner
     ? `<button class="delete-btn" onclick="deleteVideo(event, '${esc(video.id)}')" title="Delete your clip" style="font-size:0.85rem; padding:4px 10px;">delete</button>`
     : "";
@@ -373,11 +376,27 @@ pageRoutes.get("/v/:videoId{[0-9a-fA-F-]+}", async (c) => {
         </div>
         <div style="display:flex; align-items:center; gap:0.5rem;">
           ${starBtn}
+          ${editBtn}
           ${deleteBtn}
         </div>
       </div>
-      ${video.description ? `<p style="color:#aaa; margin-top:0.75rem;">${esc(video.description)}</p>` : ""}
+      ${video.description ? `<p id="clip-desc" style="color:#aaa; margin-top:0.75rem;">${esc(video.description)}</p>` : ""}
       ${urlHtml}
+      ${isOwner ? `
+      <div id="edit-form" style="display:none; margin-top:1rem; background:#1a1a2e; border-radius:8px; padding:1.25rem;">
+        <h3 style="margin:0 0 0.75rem;">Edit clip details</h3>
+        <label style="display:block; margin:0.5rem 0 0.25rem; font-weight:500;">Link</label>
+        <input type="text" id="edit-url" placeholder="https://" value="${esc(video.url)}" style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid #333; background:#0f0f0f; color:#e0e0e0; font-size:0.9rem; box-sizing:border-box;">
+        <label style="display:block; margin:0.5rem 0 0.25rem; font-weight:500;">Title</label>
+        <input type="text" id="edit-title" placeholder="optional" value="${esc(video.title)}" style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid #333; background:#0f0f0f; color:#e0e0e0; font-size:0.9rem; box-sizing:border-box;">
+        <label style="display:block; margin:0.5rem 0 0.25rem; font-weight:500;">Description</label>
+        <textarea id="edit-description" placeholder="optional" style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid #333; background:#0f0f0f; color:#e0e0e0; font-size:0.9rem; resize:vertical; min-height:60px; box-sizing:border-box;">${esc(video.description)}</textarea>
+        <div style="margin-top:0.75rem; display:flex; gap:0.75rem;">
+          <button class="btn btn-primary" id="edit-save-btn" onclick="saveEdit()">Save</button>
+          <button class="btn" onclick="closeEdit()" style="color:#888;">Cancel</button>
+        </div>
+      </div>
+      ` : ""}
       <p style="margin-top:1.5rem;">
         <a href="${galleryUrl}" style="color:#6cb4ee;">&larr; Back to assignment gallery</a>
       </p>
@@ -430,6 +449,91 @@ pageRoutes.get("/v/:videoId{[0-9a-fA-F-]+}", async (c) => {
         btn.disabled = false;
         btn.textContent = 'delete';
       }
+    }
+
+    function openEdit() {
+      var form = document.getElementById('edit-form');
+      if (form) form.style.display = 'block';
+    }
+
+    function closeEdit() {
+      var form = document.getElementById('edit-form');
+      if (form) form.style.display = 'none';
+    }
+
+    function saveEdit() {
+      var title = document.getElementById('edit-title').value.trim();
+      var desc = document.getElementById('edit-description').value.trim();
+      var url = document.getElementById('edit-url').value.trim();
+      var btn = document.getElementById('edit-save-btn');
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+
+      fetch('/api/update-video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoId: '${esc(video.id)}', title: title, description: desc, url: url }),
+      })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.error) { alert('Error: ' + data.error); return; }
+          // Update the page in-place
+          var h1 = document.querySelector('h1');
+          if (h1) {
+            var hidden = h1.querySelector('.mod-badge');
+            var hiddenHtml = hidden ? hidden.outerHTML : '';
+            if (title) {
+              h1.innerHTML = title.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + hiddenHtml;
+              h1.style.color = '';
+              h1.style.fontStyle = '';
+            } else {
+              h1.innerHTML = 'Untitled clip' + hiddenHtml;
+              h1.style.color = '#888';
+              h1.style.fontStyle = 'italic';
+            }
+          }
+          var descEl = document.getElementById('clip-desc');
+          if (desc) {
+            if (descEl) {
+              descEl.textContent = desc;
+            } else {
+              var editForm = document.getElementById('edit-form');
+              if (editForm) {
+                var p = document.createElement('p');
+                p.id = 'clip-desc';
+                p.style.color = '#aaa';
+                p.style.marginTop = '0.75rem';
+                p.textContent = desc;
+                editForm.parentNode.insertBefore(p, editForm);
+              }
+            }
+          } else if (descEl) {
+            descEl.remove();
+          }
+          // Update URL link
+          var urlContainer = document.querySelector('a[target="_blank"][rel="noopener"]');
+          if (url) {
+            var stripped = url.replace(/^https?:\\/\\//, '');
+            var display = stripped.length > 60 ? stripped.slice(0, 60) + '...' : stripped;
+            if (urlContainer) {
+              urlContainer.href = url;
+              urlContainer.innerHTML = '&#128279; ' + display.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            } else {
+              var editForm = document.getElementById('edit-form');
+              if (editForm) {
+                var p = document.createElement('p');
+                p.style.marginTop = '0.75rem';
+                p.innerHTML = '<a href="' + url.replace(/&/g,'&amp;').replace(/"/g,'&quot;') + '" target="_blank" rel="noopener" style="display:inline-flex; align-items:center; gap:0.3rem;">&#128279; ' + display.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</a>';
+                editForm.parentNode.insertBefore(p, editForm);
+              }
+            }
+          } else if (urlContainer) {
+            urlContainer.closest('p').remove();
+          }
+          closeEdit();
+        })
+        .catch(function(err) { alert('Error: ' + err.message); })
+        .finally(function() { btn.disabled = false; btn.textContent = 'Save'; });
     }
     </script>`;
 
