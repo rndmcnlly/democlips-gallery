@@ -200,7 +200,7 @@ export function layout(title: string, body: string, user: User | null = null): s
   </nav>
 </header>
 <main>${body}</main>
-<footer>${SITE_NAME} — UCSC Computational Media</footer>
+<footer>${SITE_NAME} — <a href="https://github.com/rndmcnlly/democlips-gallery" style="color:#666;">source on GitHub</a></footer>
 </body>
 </html>`;
 }
