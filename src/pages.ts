@@ -20,30 +20,25 @@ pageRoutes.get("/", (c) => {
 
   const moderator = isModerator(c.env, user);
 
-  const body = user
-    ? `<div style="text-align:center; padding: 4rem 0;">
-        <h1 style="font-size:2rem;">Demo<span style="color:#f7931a">Clips</span></h1>
-        <p style="color:#aaa; max-width:450px; margin:1rem auto;">
-          Share short video clips of your game engine projects with your classmates.
-          See what others are building. Get inspired.
-        </p>
-        <p style="color:#888; margin-top:2rem;">
+  const cta = user
+    ? `<p style="color:#888; margin-top:2rem;">
           Use the link your instructor gave you to go to your course's assignment gallery.
         </p>
         <p style="margin-top:1.5rem;">
           <a href="/onboarding" style="color:#6cb4ee;">Instructor? Set up your gallery &rarr;</a>
         </p>
-        ${moderator ? `<p style="margin-top:1rem;"><a href="/moderation" class="btn btn-primary" style="background:#7c3aed;">Moderation Dashboard</a></p>` : ""}
-      </div>`
-    : `<div style="text-align:center; padding: 4rem 0;">
+        ${moderator ? `<p style="margin-top:1rem;"><a href="/moderation" class="btn btn-primary" style="background:#7c3aed;">Moderation Dashboard</a></p>` : ""}`
+    : `<p style="margin-top:2rem;">
+          <a href="/auth/login" class="btn btn-primary">Sign in with your @ucsc.edu account</a>
+        </p>`;
+
+  const body = `<div style="text-align:center; padding: 4rem 0;">
         <h1 style="font-size:2rem;">Demo<span style="color:#f7931a">Clips</span></h1>
         <p style="color:#aaa; max-width:450px; margin:1rem auto;">
-          Share short video clips of your game engine projects with your classmates.
+          Share short video clips of your computational media projects with your classmates.
           See what others are building. Get inspired.
         </p>
-        <p style="margin-top:2rem;">
-          <a href="/auth/login" class="btn btn-primary">Sign in with your @ucsc.edu account</a>
-        </p>
+        ${cta}
       </div>`;
 
   return c.html(layout("Welcome", body, user));
