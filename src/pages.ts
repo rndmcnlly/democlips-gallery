@@ -667,8 +667,18 @@ pageRoutes.get(
           <span id="capture-status" style="color:#888; font-size:0.85rem;"></span>
         </div>
         <p style="color:#666; font-size:0.75rem; margin:0.75rem 0 0;">
-          Records at up to 720p using VP8/WebM for reasonable file sizes. The recording uploads automatically when you stop.
+          Records at up to 720p using VP8/WebM for reasonable file sizes.
         </p>
+        <div id="capture-preview" style="display:none; margin-top:1rem; border-top:1px solid #2a2a4a; padding-top:1rem;">
+          <video id="preview-video" controls playsinline style="width:100%; max-height:400px; border-radius:6px; background:#000;"></video>
+          <p id="capture-size-warning" style="display:none; color:#f7931a; font-size:0.85rem; margin:0.75rem 0 0;">
+            This recording is quite large. Consider recording a shorter, more focused demo to keep upload times reasonable.
+          </p>
+          <div style="margin-top:0.75rem; display:flex; gap:0.75rem; align-items:center;">
+            <button class="btn btn-primary" id="accept-recording-btn" onclick="acceptRecording()" style="font-size:0.85rem; padding:0.4rem 1rem;">Upload this recording</button>
+            <button class="btn" id="discard-recording-btn" onclick="discardRecording()" style="font-size:0.85rem; padding:0.4rem 1rem; color:#e53e3e; border-color:#e53e3e;">Discard</button>
+          </div>
+        </div>
       </section>
 
       <section style="background:#1a1a2e; border:1px solid #2a2a4a; border-radius:8px; padding:1.25rem;">
@@ -838,6 +848,7 @@ pageRoutes.get(
     var recordedChunks = [];
     var captureTimerInterval = null;
     var captureStartTime = 0;
+    var pendingRecordingFile = null;
 
     function fmtTimer(sec) {
       var m = Math.floor(sec / 60);
@@ -861,7 +872,7 @@ pageRoutes.get(
           height: { ideal: 720, max: 720 },
           frameRate: { ideal: 30, max: 30 },
         },
-        audio: false,
+        audio: true,
       }).then(function(stream) {
         mediaStream = stream;
 
@@ -889,7 +900,6 @@ pageRoutes.get(
           document.getElementById('capture-timer').style.display = 'none';
           document.getElementById('stop-capture-btn').style.display = 'none';
           document.getElementById('start-capture-btn').style.display = '';
-          document.getElementById('start-capture-btn').disabled = true;
 
           // Stop all tracks
           if (mediaStream) {
@@ -900,6 +910,7 @@ pageRoutes.get(
           if (recordedChunks.length === 0) {
             status.textContent = 'No data recorded.';
             status.style.color = '#e53e3e';
+            document.getElementById('start-capture-btn').disabled = false;
             return;
           }
 
@@ -907,11 +918,18 @@ pageRoutes.get(
           recordedChunks = [];
 
           var sizeMB = (blob.size / 1024 / 1024).toFixed(1);
-          status.textContent = 'Recording saved (' + sizeMB + ' MB). Uploading...';
+          status.textContent = 'Recording complete (' + sizeMB + ' MB). Review below.';
           status.style.color = '#22c55e';
 
-          var file = new File([blob], 'screen-recording.webm', { type: blob.type });
-          startUpload(file);
+          pendingRecordingFile = new File([blob], 'screen-recording.webm', { type: blob.type });
+
+          // Show preview
+          var preview = document.getElementById('capture-preview');
+          var video = document.getElementById('preview-video');
+          video.src = URL.createObjectURL(blob);
+          document.getElementById('capture-size-warning').style.display =
+            blob.size > 300 * 1024 * 1024 ? 'block' : 'none';
+          preview.style.display = 'block';
         };
 
         // If the user stops sharing via the browser UI, treat it as stop
@@ -953,6 +971,29 @@ pageRoutes.get(
       if (mediaRecorder && mediaRecorder.state !== 'inactive') {
         mediaRecorder.stop();
       }
+    }
+
+    function acceptRecording() {
+      if (!pendingRecordingFile) return;
+      var video = document.getElementById('preview-video');
+      URL.revokeObjectURL(video.src);
+      video.src = '';
+      document.getElementById('capture-preview').style.display = 'none';
+      document.getElementById('capture-status').textContent = '';
+      startUpload(pendingRecordingFile);
+      pendingRecordingFile = null;
+    }
+
+    function discardRecording() {
+      pendingRecordingFile = null;
+      var video = document.getElementById('preview-video');
+      URL.revokeObjectURL(video.src);
+      video.src = '';
+      document.getElementById('capture-preview').style.display = 'none';
+      var status = document.getElementById('capture-status');
+      status.textContent = 'Discarded. Ready to record again.';
+      status.style.color = '#888';
+      document.getElementById('start-capture-btn').disabled = false;
     }
 
     // ── Metadata save ───────────────────────────────────────────
