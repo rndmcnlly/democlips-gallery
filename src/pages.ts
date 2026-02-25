@@ -128,10 +128,6 @@ pageRoutes.get("/onboarding", requireAuth, async (c) => {
           <button id="copy-btn" onclick="copyUrl()" class="btn btn-primary"
                   style="flex-shrink:0; font-size:0.8rem; padding:0.35rem 0.75rem;">Copy</button>
         </div>
-        <table style="margin-top:0.75rem; font-size:0.85rem; color:#888;">
-          <tr><td style="padding-right:1rem;">Course ID</td><td id="out-course" style="color:#e0e0e0; font-family:monospace;"></td></tr>
-          <tr><td style="padding-right:1rem;">Assignment ID</td><td id="out-assignment" style="color:#e0e0e0; font-family:monospace;"></td></tr>
-        </table>
 
         <h2 style="font-size:1.1rem; color:#f7931a; margin-top:2rem; margin-bottom:0.5rem;">Step 3 &mdash; Know how moderation works</h2>
         <p style="color:#aaa; font-size:0.9rem; margin-bottom:0.5rem;">
@@ -156,8 +152,6 @@ pageRoutes.get("/onboarding", requireAuth, async (c) => {
     var result = document.getElementById("result");
     var error = document.getElementById("parse-error");
     var galleryUrl = document.getElementById("gallery-url");
-    var outCourse = document.getElementById("out-course");
-    var outAssignment = document.getElementById("out-assignment");
     var copyBtn = document.getElementById("copy-btn");
 
     var pattern = /\\/courses\\/(\\d+)\\/assignments\\/(\\d+)/;
@@ -177,8 +171,6 @@ pageRoutes.get("/onboarding", requireAuth, async (c) => {
       var assignmentId = m[2];
       var url = location.origin + "/" + courseId + "/" + assignmentId;
       galleryUrl.textContent = url;
-      outCourse.textContent = courseId;
-      outAssignment.textContent = assignmentId;
       result.style.display = "block";
     }
 
