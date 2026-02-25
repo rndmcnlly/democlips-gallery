@@ -693,10 +693,6 @@ pageRoutes.get(
             <code id="key-url" style="flex:1; word-break:break-all; color:#6cb4ee; font-size:0.8rem;"></code>
             <button onclick="copyText('key-url', this)" class="btn btn-primary" style="flex-shrink:0; font-size:0.75rem; padding:0.25rem 0.5rem;">Copy</button>
           </div>
-          <details style="margin-top:0.75rem;">
-            <summary style="color:#888; font-size:0.8rem; cursor:pointer;">Example: upload with curl</summary>
-            <pre style="background:#111; border:1px solid #333; border-radius:6px; padding:0.5rem 0.75rem; font-size:0.75rem; color:#aaa; overflow-x:auto; margin-top:0.5rem;"><code id="key-curl-example"></code></pre>
-          </details>
           <p style="color:#666; font-size:0.8rem; margin-top:0.5rem;">Expires in 24 hours. Uploading replaces any existing clip.</p>
         </div>
       </section>
@@ -768,8 +764,6 @@ pageRoutes.get(
         .then(function(data) {
           if (data.error) { alert('Error: ' + data.error); btn.disabled = false; btn.textContent = 'Generate upload link'; return; }
           document.getElementById('key-url').textContent = data.url;
-          document.getElementById('key-curl-example').textContent =
-            'curl -X POST -H "Content-Type: video/mp4" \\\n     --data-binary @your-video.mp4 \\\n     ' + data.url;
           document.getElementById('key-result').style.display = 'block';
           btn.textContent = 'Regenerate upload link';
           btn.disabled = false;
