@@ -644,53 +644,78 @@ pageRoutes.get(
     <p style="color:#888;">Assignment ${esc(assignmentId)} in course ${esc(courseId)}</p>
     ${existing ? `<p style="color:#f7931a; font-size:0.9rem;">You already have a clip for this assignment. Uploading a new file will replace it.</p>` : ""}
 
-    <div class="upload-form">
-      <label for="file">Video file (.webm, .mp4 &mdash; max 500MB, 10 min)</label>
-      <input type="file" id="file" name="file" accept="video/webm,video/mp4,video/*">
+    <div style="display:grid; gap:1.5rem; margin-top:1.5rem;">
 
-      <div id="progress-wrap">
-        <div id="progress-bar"><div></div></div>
-        <div id="progress-text">Uploading...</div>
-      </div>
-
-      <div id="metadata-section" style="display:none; margin-top:1.5rem; border-top:1px solid #2a2a4a; padding-top:1rem;">
-        <p style="color:#888; font-size:0.85rem; margin:0 0 1rem;">Optional &mdash; you can always edit this later from the gallery.</p>
-
-        <label for="url">Link <span style="color:#666; font-weight:normal;">(playable game, GitHub, etc.)</span></label>
-        <input type="text" id="url" name="url" placeholder="https://">
-
-        <label for="title">Title</label>
-        <input type="text" id="title" name="title" placeholder="e.g. Player controller with wall jump">
-
-        <label for="description">Description</label>
-        <textarea id="description" name="description" placeholder="What are you showing off?"></textarea>
-
-        <div style="margin-top:1.25rem; display:flex; gap:0.75rem; align-items:center;">
-          <button class="btn btn-primary" id="save-btn" onclick="saveMetadata()" disabled>Save details</button>
-          <a href="${galleryUrl}" id="skip-link" style="color:#888; font-size:0.85rem; display:none;">Skip &mdash; go to gallery</a>
-          <span id="upload-pending-hint" style="color:#666; font-size:0.85rem;">Upload in progress...</span>
+      <section style="background:#1a1a2e; border:1px solid #2a2a4a; border-radius:8px; padding:1.25rem;">
+        <h2 style="font-size:1rem; margin:0 0 0.5rem; color:#fff;">Option A &mdash; Upload a file</h2>
+        <p style="color:#888; font-size:0.85rem; margin:0 0 0.75rem;">Select a video file from your computer (.webm, .mp4 &mdash; max 500 MB).</p>
+        <div class="upload-form" style="max-width:none;">
+          <input type="file" id="file" name="file" accept="video/webm,video/mp4,video/*" style="margin:0;">
         </div>
-      </div>
+      </section>
+
+      <section id="capture-section" style="background:#1a1a2e; border:1px solid #2a2a4a; border-radius:8px; padding:1.25rem;">
+        <h2 style="font-size:1rem; margin:0 0 0.5rem; color:#fff;">Option B &mdash; Record your screen</h2>
+        <p style="color:#888; font-size:0.85rem; margin:0 0 0.75rem;">
+          Capture a window, tab, or entire screen directly in the browser.
+          Your browser will ask what to share; recording starts immediately.
+        </p>
+        <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center;">
+          <button class="btn btn-primary" id="start-capture-btn" onclick="startScreenCapture()" style="font-size:0.85rem; padding:0.4rem 1rem;">Start recording</button>
+          <button class="btn" id="stop-capture-btn" onclick="stopScreenCapture()" style="display:none; font-size:0.85rem; padding:0.4rem 1rem; background:#e53e3e; color:#fff;">Stop recording</button>
+          <span id="capture-timer" style="color:#f7931a; font-size:0.85rem; font-variant-numeric:tabular-nums; display:none;"></span>
+          <span id="capture-status" style="color:#888; font-size:0.85rem;"></span>
+        </div>
+        <p style="color:#666; font-size:0.75rem; margin:0.75rem 0 0;">
+          Records at up to 720p using VP8/WebM for reasonable file sizes. The recording uploads automatically when you stop.
+        </p>
+      </section>
+
+      <section style="background:#1a1a2e; border:1px solid #2a2a4a; border-radius:8px; padding:1.25rem;">
+        <h2 style="font-size:1rem; margin:0 0 0.5rem; color:#fff;">Option C &mdash; Upload from an external tool</h2>
+        <p style="color:#888; font-size:0.85rem; margin:0 0 0.75rem;">
+          Generate a temporary upload link you can paste into OBS, a Unity script,
+          or any tool that can POST a video file. Expires in 24 hours.
+        </p>
+        <button class="btn btn-primary" id="gen-key-btn" onclick="generateKey()" style="font-size:0.85rem; padding:0.4rem 1rem;">Generate upload link</button>
+        <div id="key-result" style="display:none; margin-top:0.75rem;">
+          <div style="background:#111; border:1px solid #333; border-radius:6px; padding:0.5rem 0.75rem; display:flex; align-items:center; gap:0.5rem;">
+            <code id="key-url" style="flex:1; word-break:break-all; color:#6cb4ee; font-size:0.8rem;"></code>
+            <button onclick="copyText('key-url', this)" class="btn btn-primary" style="flex-shrink:0; font-size:0.75rem; padding:0.25rem 0.5rem;">Copy</button>
+          </div>
+          <details style="margin-top:0.75rem;">
+            <summary style="color:#888; font-size:0.8rem; cursor:pointer;">Example: upload with curl</summary>
+            <pre style="background:#111; border:1px solid #333; border-radius:6px; padding:0.5rem 0.75rem; font-size:0.75rem; color:#aaa; overflow-x:auto; margin-top:0.5rem;"><code id="key-curl-example"></code></pre>
+          </details>
+          <p style="color:#666; font-size:0.8rem; margin-top:0.5rem;">Expires in 24 hours. Uploading replaces any existing clip.</p>
+        </div>
+      </section>
+
     </div>
 
-    <div style="margin-top:2.5rem; border-top:1px solid #2a2a4a; padding-top:1.5rem;">
-      <h2 style="font-size:1rem; color:#ccc; margin:0 0 0.5rem;">Upload from an external tool</h2>
-      <p style="color:#888; font-size:0.85rem; margin:0 0 0.75rem;">
-        Generate a temporary upload link you can paste into OBS, a Unity script,
-        or any tool that can POST a video file. The link is tied to your account
-        and this assignment, and expires in 24 hours.
-      </p>
-      <button class="btn btn-primary" id="gen-key-btn" onclick="generateKey()" style="font-size:0.85rem; padding:0.4rem 1rem;">Generate upload link</button>
-      <div id="key-result" style="display:none; margin-top:0.75rem;">
-        <div style="background:#111; border:1px solid #333; border-radius:6px; padding:0.5rem 0.75rem; display:flex; align-items:center; gap:0.5rem;">
-          <code id="key-url" style="flex:1; word-break:break-all; color:#6cb4ee; font-size:0.8rem;"></code>
-          <button onclick="copyText('key-url', this)" class="btn btn-primary" style="flex-shrink:0; font-size:0.75rem; padding:0.25rem 0.5rem;">Copy</button>
-        </div>
-        <details style="margin-top:0.75rem;">
-          <summary style="color:#888; font-size:0.8rem; cursor:pointer;">Example: upload with curl</summary>
-          <pre style="background:#111; border:1px solid #333; border-radius:6px; padding:0.5rem 0.75rem; font-size:0.75rem; color:#aaa; overflow-x:auto; margin-top:0.5rem;"><code id="key-curl-example"></code></pre>
-        </details>
-        <p style="color:#666; font-size:0.8rem; margin-top:0.5rem;">Expires in 24 hours. Uploading replaces any existing clip.</p>
+    <div id="progress-section" style="display:none; margin-top:1.5rem; background:#1a1a2e; border:1px solid #2a2a4a; border-radius:8px; padding:1.25rem;">
+      <div id="progress-bar" style="height:8px; background:#333; border-radius:4px; overflow:hidden;">
+        <div id="progress-fill" style="height:100%; background:#2563eb; width:0%; transition:width 0.3s;"></div>
+      </div>
+      <div id="progress-text" style="font-size:0.85rem; color:#888; margin-top:0.25rem;">Uploading...</div>
+    </div>
+
+    <div id="metadata-section" class="upload-form" style="display:none; margin-top:1.5rem;">
+      <p style="color:#888; font-size:0.85rem; margin:0 0 1rem;">Optional &mdash; you can always edit this later from the gallery.</p>
+
+      <label for="url">Link <span style="color:#666; font-weight:normal;">(playable game, GitHub, etc.)</span></label>
+      <input type="text" id="url" name="url" placeholder="https://">
+
+      <label for="title">Title</label>
+      <input type="text" id="title" name="title" placeholder="e.g. Player controller with wall jump">
+
+      <label for="description">Description</label>
+      <textarea id="description" name="description" placeholder="What are you showing off?"></textarea>
+
+      <div style="margin-top:1.25rem; display:flex; gap:0.75rem; align-items:center;">
+        <button class="btn btn-primary" id="save-btn" onclick="saveMetadata()" disabled>Save details</button>
+        <a href="${galleryUrl}" id="skip-link" style="color:#888; font-size:0.85rem; display:none;">Skip &mdash; go to gallery</a>
+        <span id="upload-pending-hint" style="color:#666; font-size:0.85rem;">Upload in progress...</span>
       </div>
     </div>
 
@@ -700,6 +725,8 @@ pageRoutes.get(
     var galleryUrl = '${galleryUrl}';
     var uploadDone = false;
 
+    // ── Helpers ──────────────────────────────────────────────────
+
     function copyText(elementId, btn) {
       var text = document.getElementById(elementId).textContent;
       navigator.clipboard.writeText(text).then(function() {
@@ -708,6 +735,14 @@ pageRoutes.get(
         setTimeout(function() { btn.textContent = orig; }, 1500);
       });
     }
+
+    function lockAllInputs() {
+      document.getElementById('file').disabled = true;
+      document.getElementById('start-capture-btn').disabled = true;
+      document.getElementById('gen-key-btn').disabled = true;
+    }
+
+    // ── Option C: External upload key ───────────────────────────
 
     function generateKey() {
       var btn = document.getElementById('gen-key-btn');
@@ -736,23 +771,27 @@ pageRoutes.get(
         });
     }
 
+    // ── Option A: File upload ───────────────────────────────────
+
     var fileInput = document.getElementById('file');
     fileInput.addEventListener('change', function() {
       var file = fileInput.files[0];
       if (!file) return;
-      if (file.size > 500 * 1024 * 1024) { alert('File too large (max 500MB).'); fileInput.value = ''; return; }
+      if (file.size > 500 * 1024 * 1024) { alert('File too large (max 500 MB).'); fileInput.value = ''; return; }
       startUpload(file);
     });
 
     function startUpload(file) {
-      var progressWrap = document.getElementById('progress-wrap');
-      var progressBar = document.getElementById('progress-bar').firstElementChild;
+      var progressSection = document.getElementById('progress-section');
+      var progressFill = document.getElementById('progress-fill');
       var progressText = document.getElementById('progress-text');
       var metaSection = document.getElementById('metadata-section');
 
-      fileInput.disabled = true;
-      progressWrap.style.display = 'block';
+      lockAllInputs();
+      progressSection.style.display = 'block';
       metaSection.style.display = 'block';
+      progressFill.style.width = '0%';
+      progressText.textContent = 'Uploading...';
 
       var upload = new tus.Upload(file, {
         endpoint: '/api/tus-upload',
@@ -760,17 +799,17 @@ pageRoutes.get(
         retryDelays: [0, 1000, 3000, 5000],
         metadata: {
           filename: file.name,
-          filetype: file.type,
+          filetype: file.type || 'video/webm',
           courseId: '${esc(courseId)}',
           assignmentId: '${esc(assignmentId)}',
         },
         onError: function(err) {
           progressText.textContent = 'Upload failed: ' + err.message;
-          fileInput.disabled = false;
+          progressText.style.color = '#e53e3e';
         },
         onProgress: function(bytesUploaded, bytesTotal) {
           var pct = Math.round((bytesUploaded / bytesTotal) * 100);
-          progressBar.style.width = pct + '%';
+          progressFill.style.width = pct + '%';
           var mb = (bytesUploaded / 1024 / 1024).toFixed(1);
           var total = (bytesTotal / 1024 / 1024).toFixed(1);
           progressText.textContent = 'Uploading... ' + mb + ' / ' + total + ' MB (' + pct + '%)';
@@ -778,11 +817,11 @@ pageRoutes.get(
         onSuccess: function() {
           uploadDone = true;
           progressText.textContent = 'Upload complete!';
-          progressBar.style.width = '100%';
+          progressText.style.color = '#22c55e';
+          progressFill.style.width = '100%';
           document.getElementById('save-btn').disabled = false;
           document.getElementById('skip-link').style.display = '';
           document.getElementById('upload-pending-hint').style.display = 'none';
-          // Extract video ID from the upload URL
           var url = upload.url || '';
           var parts = url.split('/');
           videoId = parts[parts.length - 1] ? parts[parts.length - 1].split('?')[0] : null;
@@ -791,6 +830,132 @@ pageRoutes.get(
 
       upload.start();
     }
+
+    // ── Option B: Screen capture ────────────────────────────────
+
+    var mediaStream = null;
+    var mediaRecorder = null;
+    var recordedChunks = [];
+    var captureTimerInterval = null;
+    var captureStartTime = 0;
+
+    function fmtTimer(sec) {
+      var m = Math.floor(sec / 60);
+      var s = sec % 60;
+      return m + ':' + (s < 10 ? '0' : '') + s;
+    }
+
+    function startScreenCapture() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        alert('Screen capture is not supported in this browser.');
+        return;
+      }
+
+      var status = document.getElementById('capture-status');
+      status.textContent = 'Requesting access...';
+      status.style.color = '#888';
+
+      navigator.mediaDevices.getDisplayMedia({
+        video: {
+          width: { ideal: 1280, max: 1280 },
+          height: { ideal: 720, max: 720 },
+          frameRate: { ideal: 30, max: 30 },
+        },
+        audio: false,
+      }).then(function(stream) {
+        mediaStream = stream;
+
+        // Pick a codec the browser actually supports
+        var mimeType = 'video/webm;codecs=vp8';
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+          mimeType = 'video/webm';
+          if (!MediaRecorder.isTypeSupported(mimeType)) {
+            mimeType = '';  // let the browser decide
+          }
+        }
+
+        var options = { videoBitsPerSecond: 2500000 };  // 2.5 Mbps cap
+        if (mimeType) options.mimeType = mimeType;
+
+        recordedChunks = [];
+        mediaRecorder = new MediaRecorder(stream, options);
+
+        mediaRecorder.ondataavailable = function(e) {
+          if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = function() {
+          clearInterval(captureTimerInterval);
+          document.getElementById('capture-timer').style.display = 'none';
+          document.getElementById('stop-capture-btn').style.display = 'none';
+          document.getElementById('start-capture-btn').style.display = '';
+          document.getElementById('start-capture-btn').disabled = true;
+
+          // Stop all tracks
+          if (mediaStream) {
+            mediaStream.getTracks().forEach(function(t) { t.stop(); });
+            mediaStream = null;
+          }
+
+          if (recordedChunks.length === 0) {
+            status.textContent = 'No data recorded.';
+            status.style.color = '#e53e3e';
+            return;
+          }
+
+          var blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'video/webm' });
+          recordedChunks = [];
+
+          var sizeMB = (blob.size / 1024 / 1024).toFixed(1);
+          status.textContent = 'Recording saved (' + sizeMB + ' MB). Uploading...';
+          status.style.color = '#22c55e';
+
+          var file = new File([blob], 'screen-recording.webm', { type: blob.type });
+          startUpload(file);
+        };
+
+        // If the user stops sharing via the browser UI, treat it as stop
+        stream.getVideoTracks()[0].onended = function() {
+          if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+          }
+        };
+
+        mediaRecorder.start(1000);  // 1s timeslice for data chunks
+
+        // UI updates
+        document.getElementById('start-capture-btn').style.display = 'none';
+        document.getElementById('stop-capture-btn').style.display = '';
+        status.textContent = 'Recording...';
+        status.style.color = '#f7931a';
+
+        // Timer
+        captureStartTime = Date.now();
+        var timerEl = document.getElementById('capture-timer');
+        timerEl.style.display = '';
+        timerEl.textContent = '0:00';
+        captureTimerInterval = setInterval(function() {
+          var elapsed = Math.floor((Date.now() - captureStartTime) / 1000);
+          timerEl.textContent = fmtTimer(elapsed);
+        }, 1000);
+
+      }).catch(function(err) {
+        if (err.name === 'NotAllowedError' || err.name === 'AbortError') {
+          status.textContent = 'Capture cancelled.';
+        } else {
+          status.textContent = 'Error: ' + err.message;
+          status.style.color = '#e53e3e';
+        }
+      });
+    }
+
+    function stopScreenCapture() {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
+    }
+
+    // ── Metadata save ───────────────────────────────────────────
 
     function saveMetadata() {
       var title = document.getElementById('title').value.trim();
@@ -804,8 +969,7 @@ pageRoutes.get(
       }
 
       if (!videoId) {
-        if (!uploadDone) { alert('Upload still in progress — hang on!'); return; }
-        // Video ID unknown but upload done; just go to gallery
+        if (!uploadDone) { alert('Upload still in progress \\u2014 hang on!'); return; }
         window.location.href = galleryUrl;
         return;
       }

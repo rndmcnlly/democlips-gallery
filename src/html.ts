@@ -91,13 +91,6 @@ export function layout(title: string, body: string, user: User | null = null): s
   .upload-form textarea { resize: vertical; min-height: 60px; }
   .upload-form input[type="file"] { color: #aaa; margin: 0.5rem 0; }
   #progress-wrap { display: none; margin: 1rem 0; }
-  #progress-bar {
-    height: 8px; background: #333; border-radius: 4px; overflow: hidden;
-  }
-  #progress-bar div {
-    height: 100%; background: #2563eb; width: 0%; transition: width 0.3s;
-  }
-  #progress-text { font-size: 0.85rem; color: #888; margin-top: 0.25rem; }
   .empty-state {
     text-align: center; padding: 3rem; color: #666;
     border: 2px dashed #2a2a4a; border-radius: 8px;
