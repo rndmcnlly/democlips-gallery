@@ -30,12 +30,42 @@ export async function softAuth(c: any, next: any) {
   await next();
 }
 
-/** Hard auth guard for protected routes. */
+/** Hard auth guard for protected routes. Sets return_to so login redirects back. */
 export function requireAuth(c: any, next: any) {
   if (!c.var.user) {
+    setCookie(c, "return_to", c.req.path, {
+      path: "/",
+      httpOnly: true,
+      secure: isSecure(c.env),
+      sameSite: "Lax",
+      maxAge: 300,
+    });
     return c.redirect("/auth/login");
   }
   return next();
+}
+
+// ─── Helpers ────────────────────────────────────────────────────
+
+/** Minimal error page with a retry link so users never hit a dead end. */
+function authErrorPage(title: string, detail: string): string {
+  return `<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${title}</title>
+<style>
+  body{background:#0f0f0f;color:#e0e0e0;font-family:system-ui,sans-serif;
+       display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;}
+  .box{text-align:center;max-width:28rem;padding:2rem;}
+  h1{font-size:1.4rem;margin-bottom:.5rem;}
+  p{color:#888;line-height:1.5;}
+  a{color:#6cf;text-decoration:none;} a:hover{text-decoration:underline;}
+</style>
+</head><body><div class="box">
+<h1>${title}</h1>
+<p>${detail}</p>
+<p style="margin-top:1.5rem;"><a href="/auth/login">Try signing in again</a> · <a href="/">Home</a></p>
+</div></body></html>`;
 }
 
 // ─── Auth Routes ────────────────────────────────────────────────
@@ -74,9 +104,11 @@ authRoutes.get("/callback", async (c) => {
 
   deleteCookie(c, "oauth_state", { path: "/" });
 
-  if (error) return c.text(`OAuth error: ${error}`, 400);
+  if (error) {
+    return c.html(authErrorPage("Sign-in cancelled", "Google returned an error. This usually means the sign-in was cancelled or permissions were denied."), 400);
+  }
   if (!code || !state || state !== storedState) {
-    return c.text("Invalid OAuth state", 403);
+    return c.html(authErrorPage("Session expired", "Your login session timed out before it could complete. This can happen if the sign-in page sat open for too long."), 403);
   }
 
   // Exchange code for tokens
@@ -93,7 +125,7 @@ authRoutes.get("/callback", async (c) => {
   });
 
   if (!tokenRes.ok) {
-    return c.text(`Token exchange failed: ${await tokenRes.text()}`, 500);
+    return c.html(authErrorPage("Sign-in failed", "Something went wrong exchanging credentials with Google. This is usually temporary."), 500);
   }
 
   const tokens = (await tokenRes.json()) as { access_token: string };
@@ -103,7 +135,9 @@ authRoutes.get("/callback", async (c) => {
     headers: { Authorization: `Bearer ${tokens.access_token}` },
   });
 
-  if (!infoRes.ok) return c.text("Failed to fetch user info", 500);
+  if (!infoRes.ok) {
+    return c.html(authErrorPage("Sign-in failed", "Could not retrieve your account information from Google. This is usually temporary."), 500);
+  }
 
   const info = (await infoRes.json()) as {
     sub: string;
@@ -115,19 +149,44 @@ authRoutes.get("/callback", async (c) => {
 
   // Server-side domain enforcement
   if (info.hd !== c.env.ALLOWED_DOMAIN) {
-    return c.text(
-      `Access restricted to @${c.env.ALLOWED_DOMAIN} accounts. You signed in as ${info.email}.`,
-      403
-    );
+    return c.html(authErrorPage(
+      "Wrong account",
+      `Access is restricted to @${c.env.ALLOWED_DOMAIN} accounts. You signed in as ${info.email}. Try again with your university account.`
+    ), 403);
   }
 
-  // Upsert user in D1
-  await c.env.DB.prepare(
-    `INSERT INTO users (id, email, name, picture) VALUES (?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET email=excluded.email, name=excluded.name, picture=excluded.picture`
+  // Upsert user in D1.
+  // If the email already belongs to a row with a different id (e.g. a backfill
+  // import that used a synthetic id like "backfill:1234"), migrate that row's id
+  // to the real Google sub and cascade the change to videos and stars.
+  const existing = await c.env.DB.prepare(
+    "SELECT id FROM users WHERE email = ?"
   )
-    .bind(info.sub, info.email, info.name, info.picture)
-    .run();
+    .bind(info.email)
+    .first<{ id: string }>();
+
+  if (existing && existing.id !== info.sub) {
+    // Migrate: replace the old synthetic id with the real Google sub.
+    // D1 enforces foreign keys, so we must: clear the old row's email
+    // (to avoid UNIQUE conflict), insert the new row (so the FK target
+    // exists), reparent children, then delete the old row.
+    await c.env.DB.batch([
+      c.env.DB.prepare("UPDATE users SET email = '' WHERE id = ?").bind(existing.id),
+      c.env.DB.prepare(
+        "INSERT INTO users (id, email, name, picture) VALUES (?, ?, ?, ?)"
+      ).bind(info.sub, info.email, info.name, info.picture),
+      c.env.DB.prepare("UPDATE stars  SET user_id = ? WHERE user_id = ?").bind(info.sub, existing.id),
+      c.env.DB.prepare("UPDATE videos SET user_id = ? WHERE user_id = ?").bind(info.sub, existing.id),
+      c.env.DB.prepare("DELETE FROM users WHERE id = ?").bind(existing.id),
+    ]);
+  } else {
+    await c.env.DB.prepare(
+      `INSERT INTO users (id, email, name, picture) VALUES (?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET email=excluded.email, name=excluded.name, picture=excluded.picture`
+    )
+      .bind(info.sub, info.email, info.name, info.picture)
+      .run();
+  }
 
   // Issue JWT session cookie
   const jwt = await sign(

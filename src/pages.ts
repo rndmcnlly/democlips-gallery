@@ -4,8 +4,7 @@
 // single-video page, assignment gallery, upload page, and 404.
 
 import { Hono } from "hono";
-import { setCookie } from "hono/cookie";
-import { Bindings, Variables, VideoRow, isSecure, isModerator } from "./types";
+import { Bindings, Variables, VideoRow, isModerator } from "./types";
 import { layout, esc, fmtDuration, fmtDate, videoCard, playerScript } from "./html";
 import { requireAuth } from "./auth";
 import { refreshVideoStatus } from "./stream";
@@ -262,20 +261,9 @@ pageRoutes.get("/moderation", requireAuth, async (c) => {
 // ─── Single Video Page ──────────────────────────────────────────
 
 /** Standalone video page: shareable link to a single clip. */
-pageRoutes.get("/v/:videoId{[0-9a-fA-F-]+}", async (c) => {
-  const user = c.var.user;
+pageRoutes.get("/v/:videoId{[0-9a-fA-F-]+}", requireAuth, async (c) => {
+  const user = c.var.user!;
   const videoId = c.req.param("videoId");
-
-  if (!user) {
-    setCookie(c, "return_to", c.req.path, {
-      path: "/",
-      httpOnly: true,
-      secure: isSecure(c.env),
-      sameSite: "Lax",
-      maxAge: 300,
-    });
-    return c.redirect("/auth/login");
-  }
 
   const moderator = isModerator(c.env, user);
 
@@ -530,22 +518,10 @@ pageRoutes.get("/v/:videoId{[0-9a-fA-F-]+}", async (c) => {
 // ─── Assignment Gallery ─────────────────────────────────────────
 
 /** Assignment gallery: view all clips for a course/assignment, with upload link. */
-pageRoutes.get("/:courseId{[0-9a-fA-F-]+}/:assignmentId{[0-9a-fA-F-]+}", async (c) => {
-  const user = c.var.user;
+pageRoutes.get("/:courseId{[0-9a-fA-F-]+}/:assignmentId{[0-9a-fA-F-]+}", requireAuth, async (c) => {
+  const user = c.var.user!;
   const courseId = c.req.param("courseId");
   const assignmentId = c.req.param("assignmentId");
-
-  if (!user) {
-    // Set return_to so login redirects back here
-    setCookie(c, "return_to", c.req.path, {
-      path: "/",
-      httpOnly: true,
-      secure: isSecure(c.env),
-      sameSite: "Lax",
-      maxAge: 300,
-    });
-    return c.redirect("/auth/login");
-  }
 
   const moderator = isModerator(c.env, user);
 
