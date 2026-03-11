@@ -8,7 +8,7 @@ import { Hono } from "hono";
 import { sign, verify } from "hono/jwt";
 import { Bindings, Variables, UploadKeyClaims } from "./types";
 import { requireAuth } from "./auth";
-import { streamAPI, initiateStreamUpload } from "./stream";
+import { streamAPI, initiateStreamUpload, createLiveInput, deleteLiveInput } from "./stream";
 
 export const uploadKeyRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -165,7 +165,59 @@ uploadKeyRoutes.post("/k/:key", async (c) => {
   return c.json({ ok: true, videoId });
 });
 
-// CORS preflight for upload key endpoint
+// ─── Stream via OBS (Live Input) ────────────────────────────────
+
+/**
+ * Create a Cloudflare Stream Live Input for OBS-style RTMP streaming.
+ * Returns RTMPS URL + stream key. Each call clobbers any previous live
+ * input for this user+course+assignment.
+ */
+uploadKeyRoutes.post("/k/:key/stream", async (c) => {
+  const claims = await verifyUploadKey(c.req.param("key"), c.env.JWT_SECRET);
+  if (!claims) {
+    return c.json({ error: "Invalid or expired upload key" }, 401);
+  }
+
+  // Clobber any existing live input for this user+course+assignment
+  const existing = await c.env.DB.prepare(
+    "SELECT id FROM live_inputs WHERE user_id = ? AND course_id = ? AND assignment_id = ?"
+  )
+    .bind(claims.sub, claims.courseId, claims.assignmentId)
+    .first<{ id: string }>();
+
+  if (existing) {
+    await deleteLiveInput(c.env, existing.id);
+    await c.env.DB.prepare("DELETE FROM live_inputs WHERE id = ?").bind(existing.id).run();
+  }
+
+  // Create the live input on Cloudflare Stream
+  const input = await createLiveInput(c.env, { creator: claims.email });
+  if (!input) {
+    return c.json({ error: "Failed to create live input on Cloudflare Stream" }, 500);
+  }
+
+  // Store in D1 with the upload key's expiry
+  const expiresAt = new Date(claims.exp * 1000).toISOString();
+  await c.env.DB.prepare(
+    `INSERT INTO live_inputs (id, user_id, course_id, assignment_id, expires_at)
+     VALUES (?, ?, ?, ?, ?)`
+  )
+    .bind(input.uid, claims.sub, claims.courseId, claims.assignmentId, expiresAt)
+    .run();
+
+  return c.json({
+    ok: true,
+    rtmps: {
+      url: input.rtmps.url,
+      streamKey: input.rtmps.streamKey,
+    },
+    srt: input.srt,
+    liveInputId: input.uid,
+    expiresAt,
+  });
+});
+
+// CORS preflight for upload key endpoints
 uploadKeyRoutes.options("/k/:key", (c) => {
   return new Response(null, {
     status: 204,
@@ -174,6 +226,18 @@ uploadKeyRoutes.options("/k/:key", (c) => {
       "Access-Control-Allow-Methods": "POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, Upload-Length, Upload-Metadata, Tus-Resumable",
       "Access-Control-Expose-Headers": "Location, Tus-Resumable",
+      "Access-Control-Max-Age": "86400",
+    },
+  });
+});
+
+uploadKeyRoutes.options("/k/:key/stream", (c) => {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
       "Access-Control-Max-Age": "86400",
     },
   });

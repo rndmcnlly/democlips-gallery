@@ -7,7 +7,7 @@ import { Hono } from "hono";
 import { Bindings, Variables, VideoRow, isModerator } from "./types";
 import { layout, esc, fmtDuration, fmtDate, videoCard, playerScript } from "./html";
 import { requireAuth } from "./auth";
-import { refreshVideoStatus } from "./stream";
+import { refreshVideoStatus, resolveLiveInputs } from "./stream";
 
 export const pageRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -525,6 +525,10 @@ pageRoutes.get("/:courseId{[0-9a-fA-F-]+}/:assignmentId{[0-9a-fA-F-]+}", require
 
   const moderator = isModerator(c.env, user);
 
+  // Resolve any pending live inputs (OBS streams) before querying videos.
+  // This may INSERT new video rows if recordings have finished processing.
+  await resolveLiveInputs(c.env, courseId, assignmentId);
+
   const { results: videos } = await c.env.DB.prepare(
     `SELECT v.*, u.name as user_name, u.picture as user_picture, u.email as user_email,
             (SELECT COUNT(*) FROM stars s WHERE s.video_id = v.id) as star_count,
@@ -553,7 +557,6 @@ pageRoutes.get("/:courseId{[0-9a-fA-F-]+}/:assignmentId{[0-9a-fA-F-]+}", require
   }
 
   const sd = c.env.STREAM_CUSTOMER_SUBDOMAIN;
-  const hasOwnClip = videos.some((v) => v.user_id === user.sub);
   const cards = videos.length
     ? `<div class="card-grid">${videos
         .map((v) => videoCard(v, sd, user.sub, moderator))
@@ -563,14 +566,21 @@ pageRoutes.get("/:courseId{[0-9a-fA-F-]+}/:assignmentId{[0-9a-fA-F-]+}", require
         <p>Be the first!</p>
       </div>`;
 
-  const uploadLabel = hasOwnClip ? "Replace your clip" : "Upload a clip";
+  const ownClip = videos.find((v) => v.user_id === user.sub);
+  const uploadLabel = ownClip ? "Replace your clip" : "Upload a clip";
+  const editYourClipBtn = ownClip
+    ? `<button class="btn" onclick="editYourClip()" style="background:#1a1a2e; border:1px solid #2a2a4a; color:#e0e0e0;">Edit your clip</button>`
+    : "";
   const body = `
     <div class="breadcrumb">
       <a href="/">Home</a> / ${esc(courseId)} / ${esc(assignmentId)}
     </div>
     <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem;">
       <h1 style="margin:0;">Assignment ${esc(assignmentId)}</h1>
-      <a href="/${esc(courseId)}/${esc(assignmentId)}/upload" class="btn btn-primary">${uploadLabel}</a>
+      <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+        ${editYourClipBtn}
+        <a href="/${esc(courseId)}/${esc(assignmentId)}/upload" class="btn btn-primary">${uploadLabel}</a>
+      </div>
     </div>
     <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem; margin-top:0.5rem;">
       <p style="color:#888; margin:0;">Course ${esc(courseId)} &middot; ${videos.length} clip${videos.length !== 1 ? "s" : ""}</p>
@@ -580,7 +590,20 @@ pageRoutes.get("/:courseId{[0-9a-fA-F-]+}/:assignmentId{[0-9a-fA-F-]+}", require
       </div>` : ""}
     </div>
     ${cards}
-    ${playerScript()}`;
+    ${playerScript()}
+    ${ownClip ? `<script>
+    function editYourClip() {
+      var card = document.getElementById('card-${esc(ownClip.id)}');
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Brief highlight then open edit overlay
+        card.style.outline = '2px solid #f7931a';
+        setTimeout(function() { card.style.outline = ''; }, 1500);
+        var editBtn = card.querySelector('.delete-btn[title="Edit details"]');
+        if (editBtn) editBtn.click();
+      }
+    }
+    </script>` : ""}`;
 
   return c.html(layout(`Assignment ${assignmentId}`, body, user));
 });
@@ -655,8 +678,8 @@ pageRoutes.get(
       <section style="background:#1a1a2e; border:1px solid #2a2a4a; border-radius:8px; padding:1.25rem;">
         <h2 style="font-size:1rem; margin:0 0 0.5rem; color:#fff;">Option C &mdash; Upload from an external tool</h2>
         <p style="color:#888; font-size:0.85rem; margin:0 0 0.75rem;">
-          Generate a temporary upload link you can paste into OBS, a Unity script,
-          or any tool that can POST a video file. Expires in 24 hours.
+          Generate a temporary upload link you can paste into a Unity script,
+          curl, or any tool that can POST a video file. Expires in 24 hours.
         </p>
         <button class="btn btn-primary" id="gen-key-btn" onclick="generateKey()" style="font-size:0.85rem; padding:0.4rem 1rem;">Generate upload link</button>
         <div id="key-result" style="display:none; margin-top:0.75rem;">
@@ -665,6 +688,34 @@ pageRoutes.get(
             <button onclick="copyText('key-url', this)" class="btn btn-primary" style="flex-shrink:0; font-size:0.75rem; padding:0.25rem 0.5rem;">Copy</button>
           </div>
           <p style="color:#666; font-size:0.8rem; margin-top:0.5rem;">Expires in 24 hours. Uploading replaces any existing clip.</p>
+        </div>
+      </section>
+
+      <section style="background:#1a1a2e; border:1px solid #2a2a4a; border-radius:8px; padding:1.25rem;">
+        <h2 style="font-size:1rem; margin:0 0 0.5rem; color:#fff;">Option D &mdash; Stream via OBS</h2>
+        <p style="color:#888; font-size:0.85rem; margin:0 0 0.75rem;">
+          Get an RTMPS stream key for OBS or any RTMP-capable tool.
+          Start streaming, then stop when done. Your clip will appear
+          on the assignment page within about a minute.
+        </p>
+        <button class="btn btn-primary" id="gen-stream-btn" onclick="generateStreamKey()" style="font-size:0.85rem; padding:0.4rem 1rem;">Generate stream key</button>
+        <div id="stream-result" style="display:none; margin-top:0.75rem;">
+          <label style="display:block; font-size:0.8rem; color:#888; margin-bottom:0.25rem;">Server URL</label>
+          <div style="background:#111; border:1px solid #333; border-radius:6px; padding:0.5rem 0.75rem; display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">
+            <code id="stream-url" style="flex:1; word-break:break-all; color:#6cb4ee; font-size:0.8rem;"></code>
+            <button onclick="copyText('stream-url', this)" class="btn btn-primary" style="flex-shrink:0; font-size:0.75rem; padding:0.25rem 0.5rem;">Copy</button>
+          </div>
+          <label style="display:block; font-size:0.8rem; color:#888; margin-bottom:0.25rem;">Stream Key</label>
+          <div style="background:#111; border:1px solid #333; border-radius:6px; padding:0.5rem 0.75rem; display:flex; align-items:center; gap:0.5rem;">
+            <code id="stream-key" style="flex:1; word-break:break-all; color:#6cb4ee; font-size:0.8rem;"></code>
+            <button onclick="copyText('stream-key', this)" class="btn btn-primary" style="flex-shrink:0; font-size:0.75rem; padding:0.25rem 0.5rem;">Copy</button>
+          </div>
+          <p style="color:#666; font-size:0.8rem; margin-top:0.5rem;">
+            In OBS: Settings &rarr; Stream &rarr; Service: Custom &rarr; paste the URL and key above.
+            When you stop streaming, a recording will be saved automatically.
+            Return to the <a href="${galleryUrl}" style="color:#6cb4ee;">assignment page</a>
+            after about a minute to find and edit your clip.
+          </p>
         </div>
       </section>
 
@@ -743,6 +794,40 @@ pageRoutes.get(
           alert('Error: ' + err.message);
           btn.disabled = false;
           btn.textContent = 'Generate upload link';
+        });
+    }
+
+    // ── Option D: Stream via OBS ──────────────────────────────
+
+    function generateStreamKey() {
+      var btn = document.getElementById('gen-stream-btn');
+      btn.disabled = true;
+      btn.textContent = 'Generating...';
+
+      // First get an upload key, then use it to create a live input
+      fetch('/api/create-upload-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ courseId: '${esc(courseId)}', assignmentId: '${esc(assignmentId)}' }),
+      })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.error) throw new Error(data.error);
+          return fetch('/k/' + data.key + '/stream', { method: 'POST' });
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.error) throw new Error(data.error);
+          document.getElementById('stream-url').textContent = data.rtmps.url;
+          document.getElementById('stream-key').textContent = data.rtmps.streamKey;
+          document.getElementById('stream-result').style.display = 'block';
+          btn.textContent = 'Regenerate stream key';
+          btn.disabled = false;
+        })
+        .catch(function(err) {
+          alert('Error: ' + err.message);
+          btn.disabled = false;
+          btn.textContent = 'Generate stream key';
         });
     }
 

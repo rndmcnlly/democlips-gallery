@@ -1,9 +1,10 @@
 // ─── Stream API Helpers ─────────────────────────────────────────
 //
 // Cloudflare Stream REST API wrappers: generic fetch helper,
-// duration backfill, and TUS upload session creation.
+// duration backfill, TUS upload session creation, and Stream Live
+// input management for OBS-style RTMP ingest.
 
-import { Bindings } from "./types";
+import { Bindings, LiveInputRow } from "./types";
 
 /** Generic Cloudflare Stream API caller. */
 export async function streamAPI(
@@ -46,6 +47,143 @@ export async function refreshVideoStatus(
   await Promise.all(promises);
   return updates;
 }
+
+// ─── Stream Live (OBS) ──────────────────────────────────────────
+
+/** Response shape from the Cloudflare Stream Live Input API. */
+type LiveInputResult = {
+  uid: string;
+  rtmps: { url: string; streamKey: string };
+  srt: { url: string; streamId: string; passphrase: string };
+  created: string;
+  modified: string;
+};
+
+/** Response shape for videos produced by a Live Input. */
+type LiveInputVideoResult = {
+  uid: string;
+  readyToStream: boolean;
+  duration: number;
+  created: string;
+};
+
+/**
+ * Create a Cloudflare Stream Live Input for OBS-style RTMP ingest.
+ * Sets recording.mode to "automatic" so a replay recording is produced
+ * ~60s after the broadcast ends.
+ */
+export async function createLiveInput(
+  env: Bindings,
+  meta?: { creator?: string }
+): Promise<LiveInputResult | null> {
+  const body: Record<string, any> = {
+    recording: { mode: "automatic", timeoutSeconds: 60 },
+    meta: meta || {},
+  };
+  const data = await streamAPI(env, "/live_inputs", "POST", body);
+  if (data.success && data.result) {
+    return data.result as LiveInputResult;
+  }
+  return null;
+}
+
+/** List videos (recordings) produced by a Live Input. */
+export async function getLiveInputVideos(
+  env: Bindings,
+  liveInputId: string
+): Promise<LiveInputVideoResult[]> {
+  const data = await streamAPI(env, `/live_inputs/${liveInputId}/videos`);
+  if (data.success && data.result) {
+    return data.result as LiveInputVideoResult[];
+  }
+  return [];
+}
+
+/** Delete a Cloudflare Stream Live Input. Best-effort. */
+export async function deleteLiveInput(
+  env: Bindings,
+  liveInputId: string
+): Promise<void> {
+  await streamAPI(env, `/live_inputs/${liveInputId}`, "DELETE").catch(() => {});
+}
+
+/**
+ * Resolve pending live inputs for a given course+assignment.
+ *
+ * For each live_inputs row:
+ * - If expired with no recording: delete row + Cloudflare Live Input (cleanup).
+ * - If a recording exists: INSERT into videos, delete the live_inputs row,
+ *   and delete the Cloudflare Live Input. Returns the newly created video IDs
+ *   so the caller can include them in the gallery response.
+ *
+ * Cap at maxChecks to bound latency per page load (same principle as
+ * duration backfill).
+ */
+export async function resolveLiveInputs(
+  env: Bindings,
+  courseId: string,
+  assignmentId: string,
+  maxChecks = 5
+): Promise<string[]> {
+  const { results: pending } = await env.DB.prepare(
+    "SELECT * FROM live_inputs WHERE course_id = ? AND assignment_id = ? LIMIT ?"
+  )
+    .bind(courseId, assignmentId, maxChecks)
+    .all<LiveInputRow>();
+
+  const newVideoIds: string[] = [];
+  const now = new Date().toISOString();
+
+  for (const input of pending) {
+    // Expired with no recording? Clean up.
+    if (input.expires_at < now) {
+      const videos = await getLiveInputVideos(env, input.id);
+      if (videos.length === 0) {
+        await deleteLiveInput(env, input.id);
+        await env.DB.prepare("DELETE FROM live_inputs WHERE id = ?").bind(input.id).run();
+        continue;
+      }
+      // Expired but has a recording — fall through to resolve it
+    }
+
+    // Check for recordings
+    const videos = await getLiveInputVideos(env, input.id);
+    if (videos.length === 0) continue; // Still streaming or hasn't started
+
+    // Take the latest recording
+    const recording = videos[videos.length - 1];
+
+    // Delete any existing video for this user+course+assignment (clobber)
+    const existing = await env.DB.prepare(
+      "SELECT id FROM videos WHERE user_id = ? AND course_id = ? AND assignment_id = ?"
+    )
+      .bind(input.user_id, input.course_id, input.assignment_id)
+      .first<{ id: string }>();
+
+    if (existing) {
+      await streamAPI(env, `/${existing.id}`, "DELETE").catch(() => {});
+      await env.DB.prepare("DELETE FROM videos WHERE id = ?").bind(existing.id).run();
+    }
+
+    // Insert the recording as a real video row
+    await env.DB.prepare(
+      `INSERT INTO videos (id, user_id, course_id, assignment_id, title, description, url)
+       VALUES (?, ?, ?, ?, '', '', '')`
+    )
+      .bind(recording.uid, input.user_id, input.course_id, input.assignment_id)
+      .run();
+
+    newVideoIds.push(recording.uid);
+
+    // Clean up: delete the live input from both D1 and Cloudflare
+    await deleteLiveInput(env, input.id);
+    await env.DB.prepare("DELETE FROM live_inputs WHERE id = ?").bind(input.id).run();
+  }
+
+  return newVideoIds;
+}
+
+// ─── TUS Upload ─────────────────────────────────────────────────
 
 /**
  * Shared logic: replace any existing clip, create a TUS session on Stream,

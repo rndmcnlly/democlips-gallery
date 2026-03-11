@@ -27,6 +27,16 @@ CREATE TABLE IF NOT EXISTS videos (
 CREATE INDEX IF NOT EXISTS idx_videos_assignment ON videos(course_id, assignment_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_videos_user ON videos(user_id);
 
+CREATE TABLE IF NOT EXISTS live_inputs (
+  id TEXT PRIMARY KEY,              -- Cloudflare Stream Live Input ID
+  user_id TEXT NOT NULL REFERENCES users(id),
+  course_id TEXT NOT NULL,
+  assignment_id TEXT NOT NULL,
+  expires_at TEXT NOT NULL,         -- from upload key exp claim (ISO 8601)
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(user_id, course_id, assignment_id)
+) STRICT;
+
 CREATE TABLE IF NOT EXISTS stars (
   user_id TEXT NOT NULL REFERENCES users(id),
   video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,

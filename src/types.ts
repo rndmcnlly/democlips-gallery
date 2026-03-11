@@ -39,6 +39,15 @@ export type UploadKeyClaims = {
   exp: number;
 };
 
+export type LiveInputRow = {
+  id: string;
+  user_id: string;
+  course_id: string;
+  assignment_id: string;
+  expires_at: string;
+  created_at: string;
+};
+
 export type VideoRow = {
   id: string;
   user_id: string;
