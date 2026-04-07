@@ -103,13 +103,26 @@ This is the important bit:
 
 ## Deploying
 
+### Gallery Worker
+
 ```bash
-npx wrangler deploy
+npm run deploy
 ```
 
-That's it. The Worker deploys to `gallery.democlips.dev` (custom domain is
+The Worker deploys to `gallery.democlips.dev` (custom domain is
 configured in `wrangler.jsonc`). The D1 database, Stream integration, and all
 secrets are already wired up.
+
+### Scripts Static Site
+
+```bash
+npx wrangler pages deploy scripts/ --project-name democlips-scripts
+```
+
+This pushes the `scripts/` directory to `scripts.democlips.dev` via Cloudflare
+Pages. It's a separate project with no build step — just static files.
+
+Both services deploy from the working tree, not from HEAD.
 
 If you change `schema.sql`, run the migration on remote D1 first:
 

@@ -13,22 +13,34 @@ deployment docs.
 
 ```bash
 npm run dev              # Local dev server at localhost:8787
-npm run deploy           # Deploy to gallery.democlips.dev
+npm run deploy           # Deploy gallery Worker to gallery.democlips.dev
 npx tsc --noEmit         # Type-check (no build step — wrangler bundles)
 
 # D1 database
 npm run db:migrate:local                    # Apply schema.sql to local D1
 npm run db:migrate                          # Apply schema.sql to remote D1
 npx wrangler d1 execute democlips-gallery --local --command "SELECT ..."
+
+# Scripts static site (separate CF Pages project)
+npx wrangler pages deploy scripts/ --project-name democlips-scripts
 ```
 
 There are no tests, no linter, and no CI. Type-checking with `npx tsc --noEmit`
 is the only automated validation. Run it before suggesting a deploy.
 
+The two services deploy independently. Changes to `src/` need `npm run deploy`.
+Changes to `scripts/` need the Pages deploy command. Both deploy from the
+working tree, not from HEAD — commit before or after deploying, but don't forget.
+
 ## Project Structure
 
+This repo contains **two independent services** that share no code and
+deploy separately. The gallery Worker owns the repo root (package.json,
+wrangler.jsonc, tsconfig.json, src/). The scripts static site is just a
+flat directory of files nested inside the repo for convenience.
+
 ```
-src/
+src/                           — Gallery Worker (Hono), deployed to gallery.democlips.dev
   index.ts           — App creation, global middleware, route mounting (~30 lines)
   types.ts           — Shared types (Bindings, User, VideoRow, etc.) + isSecure, isModerator
   html.ts            — layout(), esc(), videoCard(), playerScript(), formatting helpers
@@ -38,7 +50,7 @@ src/
   upload-key.ts      — Upload key JWT logic + /api/create-upload-key, /k/:key routes
   pages.ts           — All HTML page routes (home, onboarding, moderation, gallery, upload, 404)
 
-scripts/                       — Static site deployed via CF Pages to scripts.democlips.dev
+scripts/                       — Static site (CF Pages), deployed to scripts.democlips.dev
   index.html                   — Directory listing with descriptions and copy-paste snippets
   demo-clip-recorder.mjs       — In-browser screen recorder for HTML5 game demos
 
@@ -118,7 +130,9 @@ Follow the existing style when adding new sections.
 - **Standalone scripts** in `scripts/` are ES modules (`.mjs`), using
   `let`/`const`, arrow functions, and `import.meta.url` — no global pollution.
 - External client JS: `tus-js-client@4` loaded from jsDelivr CDN (upload page).
-- Inline `<style>` in layout(). Dark theme (bg: #0f0f0f). No CSS framework.
+- Inline `<style>` in layout(). UCSC blue/gold palette with dark/light mode
+  via CSS custom properties and `@media (prefers-color-scheme: light)`.
+  No CSS framework.
 
 ## Hono Patterns
 
