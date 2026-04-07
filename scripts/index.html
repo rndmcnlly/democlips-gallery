@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DemoClips Scripts</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: #0f0f0f;
+      color: #e0e0e0;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 3rem 1.5rem;
+    }
+    h1 {
+      font-size: 1.75rem;
+      margin-bottom: 0.25rem;
+    }
+    h1 span { color: #f7931a; }
+    .subtitle {
+      color: #888;
+      font-size: 0.95rem;
+      margin-bottom: 2.5rem;
+    }
+    .subtitle a { color: #6cb4ee; text-decoration: none; }
+    .subtitle a:hover { text-decoration: underline; }
+    .script-card {
+      background: #1a1a2e;
+      border: 1px solid #2a2a4a;
+      border-radius: 8px;
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+    }
+    .script-header {
+      display: flex;
+      align-items: baseline;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.5rem;
+    }
+    .script-name {
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+    .script-name a {
+      color: #6cb4ee;
+      text-decoration: none;
+    }
+    .script-name a:hover { text-decoration: underline; }
+    .script-size {
+      color: #666;
+      font-size: 0.8rem;
+    }
+    .script-desc {
+      color: #aaa;
+      font-size: 0.9rem;
+      margin-bottom: 0.75rem;
+    }
+    .snippet-box {
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 0.5rem 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .snippet-box code {
+      flex: 1;
+      font-size: 0.8rem;
+      color: #ccc;
+      word-break: break-all;
+      white-space: pre-wrap;
+    }
+    .copy-btn {
+      flex-shrink: 0;
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 0.3rem 0.6rem;
+      font-size: 0.75rem;
+      cursor: pointer;
+    }
+    .copy-btn:hover { background: #1d4ed8; }
+    .usage-hint {
+      color: #666;
+      font-size: 0.78rem;
+      margin-top: 0.5rem;
+    }
+    .usage-hint code {
+      color: #888;
+      background: #1a1a2e;
+      padding: 0.1rem 0.3rem;
+      border-radius: 3px;
+    }
+    footer {
+      margin-top: 3rem;
+      color: #444;
+      font-size: 0.8rem;
+      text-align: center;
+    }
+    footer a { color: #6cb4ee; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Demo<span>Clips</span> Scripts</h1>
+    <p class="subtitle">
+      Utility scripts for UCSC game dev courses.
+      Add these to your project with a <code>&lt;script&gt;</code> tag.
+      <br>
+      <a href="https://gallery.democlips.dev">gallery.democlips.dev</a>
+    </p>
+
+    <div class="script-card">
+      <div class="script-header">
+        <span class="script-name"><a href="demo-clip-recorder.mjs">demo-clip-recorder.mjs</a></span>
+        <span class="script-size">7.5 KB</span>
+      </div>
+      <p class="script-desc">
+        Records a single page element (e.g. your game canvas) using the browser's
+        screen capture API, cropped to just that element. Saves a <code>.webm</code>
+        file locally that you can upload to
+        <a href="https://gallery.democlips.dev" style="color:#6cb4ee;">DemoClips</a>.
+        A dialog appears on page load. Remove the script tag when you're done recording.
+      </p>
+      <div class="snippet-box">
+        <code id="snippet-recorder">&lt;script type="module" src="https://scripts.democlips.dev/demo-clip-recorder.mjs" data-clip-root="YOUR_ELEMENT_ID"&gt;&lt;/script&gt;</code>
+        <button class="copy-btn" onclick="copySnippet('snippet-recorder', this)">Copy</button>
+      </div>
+      <p class="usage-hint">
+        <strong>Required:</strong> set <code>data-clip-root</code> to the <code>id</code> of the element
+        to record. The script will tell you if the attribute is missing or the element can't be found.
+        <br>
+        <strong>Note:</strong> Place the script tag <em>after</em> the target element in your HTML
+        (e.g. at the end of <code>&lt;body&gt;</code>) so the element exists when the script runs.
+        Uses <code>type="module"</code> so nothing leaks into your global scope.
+      </p>
+    </div>
+
+    <!-- Add more script-card blocks here as new scripts are added -->
+
+    <footer>
+      <a href="https://github.com/rndmcnlly/democlips">source on GitHub</a>
+    </footer>
+  </div>
+
+  <script>
+  function copySnippet(id, btn) {
+    var el = document.getElementById(id);
+    var text = el.textContent;
+    navigator.clipboard.writeText(text).then(function() {
+      var orig = btn.textContent;
+      btn.textContent = "Copied!";
+      setTimeout(function() { btn.textContent = orig; }, 1500);
+    });
+  }
+  </script>
+</body>
+</html>

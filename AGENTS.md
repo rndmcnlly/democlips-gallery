@@ -38,6 +38,10 @@ src/
   upload-key.ts      — Upload key JWT logic + /api/create-upload-key, /k/:key routes
   pages.ts           — All HTML page routes (home, onboarding, moderation, gallery, upload, 404)
 
+scripts/                       — Static site deployed via CF Pages to scripts.democlips.dev
+  index.html                   — Directory listing with descriptions and copy-paste snippets
+  demo-clip-recorder.mjs       — In-browser screen recorder for HTML5 game demos
+
 schema.sql           — D1 schema (users, videos, stars tables)
 wrangler.jsonc       — Worker config, D1 binding, env vars
 .dev.vars.example    — Template for local secrets
@@ -109,7 +113,10 @@ Follow the existing style when adding new sections.
 - All HTML is server-rendered via template literals. No JSX, no React.
 - Use `layout(title, body, user)` to wrap page content (from `./html`).
 - **Always escape user-supplied strings** with `esc()` in templates.
-- Client-side JS uses `var` (not const/let) and function declarations.
+- **Inline `<script>` blocks** (in `pages.ts` template literals) use `var` and
+  function declarations — these are interpolated strings, not modules.
+- **Standalone scripts** in `scripts/` are ES modules (`.mjs`), using
+  `let`/`const`, arrow functions, and `import.meta.url` — no global pollution.
 - External client JS: `tus-js-client@4` loaded from jsDelivr CDN (upload page).
 - Inline `<style>` in layout(). Dark theme (bg: #0f0f0f). No CSS framework.
 

@@ -207,7 +207,10 @@ Google OAuth restricted to `@ucsc.edu` accounts:
 ## Project Structure
 
 ```
-src/index.ts      — the entire app (single-file Hono)
+src/              — Cloudflare Worker (Hono app) for gallery.democlips.dev
+scripts/          — Static site (CF Pages) for scripts.democlips.dev
+  index.html      — Directory listing with descriptions and copy-paste snippets
+  demo-clip-recorder.mjs — In-browser screen recorder for HTML5 game demos
 schema.sql        — D1 database schema (users + videos tables)
 wrangler.jsonc    — Cloudflare Worker config (D1 binding, domain, env vars)
 .dev.vars.example — template for local dev secrets
@@ -216,9 +219,13 @@ package.json
 tsconfig.json
 ```
 
-It's a single-file Hono app. All HTML is server-rendered with inline CSS.
-The only client-side JS is for the video player lightbox, the TUS upload
-progress bar, and the delete button.
+The gallery is a multi-file Hono app. All HTML is server-rendered with
+inline CSS. The only client-side JS is for the video player lightbox, the
+TUS upload progress bar, and the delete button.
+
+The `scripts/` directory is deployed separately as a **Cloudflare Pages**
+project at `scripts.democlips.dev`. Students include these scripts in their
+game projects via `<script src="https://scripts.democlips.dev/...">` tags.
 
 ---
 
