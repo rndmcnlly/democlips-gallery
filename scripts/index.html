@@ -5,11 +5,50 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DemoClips Scripts</title>
   <style>
+    :root {
+      --color-page-bg: #0f0f0f;
+      --color-surface: #1a1a2e;
+      --color-surface-alt: #111;
+      --color-border: #2a2a4a;
+      --color-border-subtle: #333;
+      --color-accent: #fac500;
+      --color-link: #6cb4ee;
+      --color-text: #e0e0e0;
+      --color-text-muted: #aaa;
+      --color-text-faint: #888;
+      --color-text-faintest: #666;
+      --color-text-dim: #444;
+      --color-btn-bg: #003c6b;
+      --color-btn-text: #fac500;
+      --color-btn-hover: #004d87;
+      --color-code-text: #ccc;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --color-page-bg: #f5f5f5;
+        --color-surface: #ffffff;
+        --color-surface-alt: #e8e8e8;
+        --color-border: #d0d0d0;
+        --color-border-subtle: #ccc;
+        --color-accent: #c89700;
+        --color-link: #1a6fb5;
+        --color-text: #1a1a1a;
+        --color-text-muted: #555;
+        --color-text-faint: #666;
+        --color-text-faintest: #888;
+        --color-text-dim: #999;
+        --color-btn-bg: #003c6b;
+        --color-btn-text: #fac500;
+        --color-btn-hover: #004d87;
+        --color-code-text: #333;
+      }
+    }
+
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      background: #0f0f0f;
-      color: #e0e0e0;
+      background: var(--color-page-bg);
+      color: var(--color-text);
       line-height: 1.6;
       min-height: 100vh;
     }
@@ -22,17 +61,17 @@
       font-size: 1.75rem;
       margin-bottom: 0.25rem;
     }
-    h1 span { color: #f7931a; }
+    h1 span { color: var(--color-accent); }
     .subtitle {
-      color: #888;
+      color: var(--color-text-faint);
       font-size: 0.95rem;
       margin-bottom: 2.5rem;
     }
-    .subtitle a { color: #6cb4ee; text-decoration: none; }
+    .subtitle a { color: var(--color-link); text-decoration: none; }
     .subtitle a:hover { text-decoration: underline; }
     .script-card {
-      background: #1a1a2e;
-      border: 1px solid #2a2a4a;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
       border-radius: 8px;
       padding: 1.25rem;
       margin-bottom: 1rem;
@@ -49,22 +88,22 @@
       font-weight: 600;
     }
     .script-name a {
-      color: #6cb4ee;
+      color: var(--color-link);
       text-decoration: none;
     }
     .script-name a:hover { text-decoration: underline; }
     .script-size {
-      color: #666;
+      color: var(--color-text-faintest);
       font-size: 0.8rem;
     }
     .script-desc {
-      color: #aaa;
+      color: var(--color-text-muted);
       font-size: 0.9rem;
       margin-bottom: 0.75rem;
     }
     .snippet-box {
-      background: #111;
-      border: 1px solid #333;
+      background: var(--color-surface-alt);
+      border: 1px solid var(--color-border-subtle);
       border-radius: 6px;
       padding: 0.5rem 0.75rem;
       display: flex;
@@ -74,39 +113,39 @@
     .snippet-box code {
       flex: 1;
       font-size: 0.8rem;
-      color: #ccc;
+      color: var(--color-code-text);
       word-break: break-all;
       white-space: pre-wrap;
     }
     .copy-btn {
       flex-shrink: 0;
-      background: #2563eb;
-      color: #fff;
+      background: var(--color-btn-bg);
+      color: var(--color-btn-text);
       border: none;
       border-radius: 4px;
       padding: 0.3rem 0.6rem;
       font-size: 0.75rem;
       cursor: pointer;
     }
-    .copy-btn:hover { background: #1d4ed8; }
+    .copy-btn:hover { background: var(--color-btn-hover); }
     .usage-hint {
-      color: #666;
+      color: var(--color-text-faintest);
       font-size: 0.78rem;
       margin-top: 0.5rem;
     }
     .usage-hint code {
-      color: #888;
-      background: #1a1a2e;
+      color: var(--color-text-faint);
+      background: var(--color-surface);
       padding: 0.1rem 0.3rem;
       border-radius: 3px;
     }
     footer {
       margin-top: 3rem;
-      color: #444;
+      color: var(--color-text-dim);
       font-size: 0.8rem;
       text-align: center;
     }
-    footer a { color: #6cb4ee; text-decoration: none; }
+    footer a { color: var(--color-link); text-decoration: none; }
   </style>
 </head>
 <body>
@@ -128,7 +167,7 @@
         Records a single page element (e.g. your game canvas) using the browser's
         screen capture API, cropped to just that element. Saves a <code>.webm</code>
         file locally that you can upload to
-        <a href="https://gallery.democlips.dev" style="color:#6cb4ee;">DemoClips</a>.
+        <a href="https://gallery.democlips.dev">DemoClips</a>.
         A dialog appears on page load. Remove the script tag when you're done recording.
       </p>
       <div class="snippet-box">
@@ -138,6 +177,11 @@
       <p class="usage-hint">
         <strong>Required:</strong> set <code>data-clip-root</code> to the <code>id</code> of the element
         to record. The script will tell you if the attribute is missing or the element can't be found.
+        <br>
+        <strong>Optional:</strong> set <code>data-upload-url</code> to a
+        <a href="https://gallery.democlips.dev">DemoClips</a>
+        upload key URL (from the upload page's "external tool" option) to POST
+        the recording directly to the gallery instead of saving a local file.
         <br>
         <strong>Note:</strong> Place the script tag <em>after</em> the target element in your HTML
         (e.g. at the end of <code>&lt;body&gt;</code>) so the element exists when the script runs.

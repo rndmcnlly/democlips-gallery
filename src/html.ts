@@ -15,53 +15,114 @@ export function layout(title: string, body: string, user: User | null = null): s
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title} — ${SITE_NAME}</title>
 <style>
+  /* ─── Color System (UCSC Blue & Gold) ──────────────────────── */
+  :root {
+    --color-page-bg: #0f0f0f;
+    --color-surface: #1a1a2e;
+    --color-surface-alt: #111;
+    --color-border: #2a2a4a;
+    --color-border-subtle: #333;
+    --color-header-bg: #003c6b;
+    --color-header-border: #004d87;
+    --color-header-nav: #8cb8d8;
+    --color-accent: #fac500;
+    --color-link: #6cb4ee;
+    --color-text: #e0e0e0;
+    --color-text-strong: #fff;
+    --color-text-muted: #aaa;
+    --color-text-faint: #888;
+    --color-text-faintest: #666;
+    --color-text-dim: #555;
+    --color-btn-primary-bg: #003c6b;
+    --color-btn-primary-text: #fac500;
+    --color-btn-primary-hover: #004d87;
+    --color-danger: #e53e3e;
+    --color-success: #22c55e;
+    --color-warning: #f59e0b;
+    --color-sort-active-bg: #2a2a4a;
+    --color-input-bg: #1a1a2e;
+    --color-input-border: #333;
+    --color-code-bg: #111;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --color-page-bg: #f5f5f5;
+      --color-surface: #ffffff;
+      --color-surface-alt: #e8e8e8;
+      --color-border: #d0d0d0;
+      --color-border-subtle: #ccc;
+      --color-header-bg: #003c6b;
+      --color-header-border: #004d87;
+      --color-header-nav: #8cb8d8;
+      --color-accent: #c89700;
+      --color-link: #1a6fb5;
+      --color-text: #1a1a1a;
+      --color-text-strong: #000;
+      --color-text-muted: #555;
+      --color-text-faint: #666;
+      --color-text-faintest: #888;
+      --color-text-dim: #999;
+      --color-btn-primary-bg: #003c6b;
+      --color-btn-primary-text: #fac500;
+      --color-btn-primary-hover: #004d87;
+      --color-danger: #dc2626;
+      --color-success: #16a34a;
+      --color-warning: #d97706;
+      --color-sort-active-bg: #e0e0e0;
+      --color-input-bg: #ffffff;
+      --color-input-border: #ccc;
+      --color-code-bg: #e8e8e8;
+    }
+  }
+
   *, *::before, *::after { box-sizing: border-box; }
   body {
     font-family: system-ui, -apple-system, sans-serif;
-    background: #0f0f0f; color: #e0e0e0;
+    background: var(--color-page-bg); color: var(--color-text);
     margin: 0; padding: 0; line-height: 1.5;
   }
-  a { color: #6cb4ee; text-decoration: none; }
+  a { color: var(--color-link); text-decoration: none; }
   a:hover { text-decoration: underline; }
   header {
-    background: #1a1a2e; border-bottom: 1px solid #2a2a4a;
+    background: var(--color-header-bg); border-bottom: 1px solid var(--color-header-border);
     padding: 0.75rem 1.5rem; display: flex; align-items: center;
     justify-content: space-between; gap: 1rem;
   }
   header .logo { font-size: 1.25rem; font-weight: 700; color: #fff; }
-  header .logo span { color: #f7931a; }
-  header nav { display: flex; align-items: center; gap: 1rem; font-size: 0.9rem; }
+  header .logo span { color: #fac500; }
+  header nav { display: flex; align-items: center; gap: 1rem; font-size: 0.9rem; color: var(--color-header-nav); }
+  header nav a { color: var(--color-header-nav); }
   header nav img { width: 28px; height: 28px; border-radius: 50%; }
   main { max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; }
   h1 { font-size: 1.5rem; margin: 0 0 1rem; }
-  h2 { font-size: 1.2rem; margin: 1.5rem 0 0.75rem; color: #ccc; }
+  h2 { font-size: 1.2rem; margin: 1.5rem 0 0.75rem; color: var(--color-text-muted); }
   .card-grid {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 1rem;
   }
   .card {
-    background: #1a1a2e; border-radius: 8px; overflow: hidden;
-    border: 1px solid #2a2a4a; transition: border-color 0.2s;
+    background: var(--color-surface); border-radius: 8px; overflow: hidden;
+    border: 1px solid var(--color-border); transition: border-color 0.2s;
   }
-  .card:hover { border-color: #6cb4ee; }
+  .card:hover { border-color: var(--color-link); }
   .card .thumb {
-    aspect-ratio: 16/9; background: #111; display: flex;
+    aspect-ratio: 16/9; background: var(--color-surface-alt); display: flex;
     align-items: center; justify-content: center; position: relative;
     overflow: hidden;
   }
   .card .thumb img { width: 100%; height: 100%; object-fit: cover; }
   .card .thumb .processing {
-    color: #888; font-size: 0.85rem; font-style: italic;
+    color: var(--color-text-faint); font-size: 0.85rem; font-style: italic;
   }
   .card .info { padding: 0.75rem; }
-  .card .info .title { font-weight: 600; color: #fff; margin-bottom: 0.25rem; }
+  .card .info .title { font-weight: 600; color: var(--color-text-strong); margin-bottom: 0.25rem; }
   .card .info .meta {
-    font-size: 0.8rem; color: #888;
+    font-size: 0.8rem; color: var(--color-text-faint);
     display: flex; align-items: center; gap: 0.5rem;
   }
   .card .info .meta img { width: 18px; height: 18px; border-radius: 50%; }
   .card .info .desc {
-    font-size: 0.85rem; color: #aaa; margin-top: 0.5rem;
+    font-size: 0.85rem; color: var(--color-text-muted); margin-top: 0.5rem;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
     overflow: hidden;
   }
@@ -75,8 +136,8 @@ export function layout(title: string, body: string, user: User | null = null): s
     font-size: 0.9rem; font-weight: 600; cursor: pointer; border: none;
     text-decoration: none;
   }
-  .btn-primary { background: #2563eb; color: #fff; }
-  .btn-primary:hover { background: #1d4ed8; text-decoration: none; }
+  .btn-primary { background: var(--color-btn-primary-bg); color: var(--color-btn-primary-text); }
+  .btn-primary:hover { background: var(--color-btn-primary-hover); text-decoration: none; }
   .btn-google {
     background: #fff; color: #333; border: 1px solid #ddd;
     display: inline-flex; align-items: center; gap: 0.5rem;
@@ -85,15 +146,15 @@ export function layout(title: string, body: string, user: User | null = null): s
   .upload-form label { display: block; margin: 1rem 0 0.25rem; font-weight: 500; }
   .upload-form input[type="text"],
   .upload-form textarea {
-    width: 100%; padding: 0.5rem; border-radius: 6px; border: 1px solid #333;
-    background: #1a1a2e; color: #e0e0e0; font-size: 0.9rem;
+    width: 100%; padding: 0.5rem; border-radius: 6px; border: 1px solid var(--color-input-border);
+    background: var(--color-input-bg); color: var(--color-text); font-size: 0.9rem;
   }
   .upload-form textarea { resize: vertical; min-height: 60px; }
-  .upload-form input[type="file"] { color: #aaa; margin: 0.5rem 0; }
+  .upload-form input[type="file"] { color: var(--color-text-muted); margin: 0.5rem 0; }
   #progress-wrap { display: none; margin: 1rem 0; }
   .empty-state {
-    text-align: center; padding: 3rem; color: #666;
-    border: 2px dashed #2a2a4a; border-radius: 8px;
+    text-align: center; padding: 3rem; color: var(--color-text-faintest);
+    border: 2px dashed var(--color-border); border-radius: 8px;
   }
   .empty-state p { margin: 0.5rem 0; }
   .player-overlay {
@@ -110,31 +171,31 @@ export function layout(title: string, body: string, user: User | null = null): s
     width: 100%; max-width: 960px; aspect-ratio: 16/9; border: none; border-radius: 8px;
   }
   .delete-btn {
-    background: none; border: 1px solid #555; color: #888; font-size: 0.75rem;
+    background: none; border: 1px solid var(--color-text-dim); color: var(--color-text-faint); font-size: 0.75rem;
     padding: 2px 8px; border-radius: 4px; cursor: pointer; float: right;
   }
-  .delete-btn:hover { border-color: #e53e3e; color: #e53e3e; }
+  .delete-btn:hover { border-color: var(--color-danger); color: var(--color-danger); }
   .hide-btn {
-    background: none; border: 1px solid #555; color: #888; font-size: 0.75rem;
+    background: none; border: 1px solid var(--color-text-dim); color: var(--color-text-faint); font-size: 0.75rem;
     padding: 2px 8px; border-radius: 4px; cursor: pointer; float: right;
     margin-right: 0.25rem;
   }
-  .hide-btn:hover { border-color: #f59e0b; color: #f59e0b; }
-  .card.hidden-card { opacity: 0.5; border-color: #e53e3e; }
+  .hide-btn:hover { border-color: var(--color-warning); color: var(--color-warning); }
+  .card.hidden-card { opacity: 0.5; border-color: var(--color-danger); }
   .card.hidden-card:hover { opacity: 0.75; }
   .hidden-label {
     position: absolute; top: 6px; left: 6px;
-    background: #e53e3e; color: #fff; font-size: 0.7rem; font-weight: 700;
+    background: var(--color-danger); color: #fff; font-size: 0.7rem; font-weight: 700;
     padding: 1px 6px; border-radius: 3px; letter-spacing: 0.05em;
   }
   .star-btn {
-    background: none; border: 1px solid #555; color: #888; font-size: 0.8rem;
+    background: none; border: 1px solid var(--color-text-dim); color: var(--color-text-faint); font-size: 0.8rem;
     padding: 2px 8px; border-radius: 4px; cursor: pointer;
     display: inline-flex; align-items: center; gap: 4px;
     transition: color 0.15s, border-color 0.15s;
   }
-  .star-btn:hover { border-color: #f7931a; color: #f7931a; }
-  .star-btn.starred { border-color: #f7931a; color: #f7931a; }
+  .star-btn:hover { border-color: var(--color-accent); color: var(--color-accent); }
+  .star-btn.starred { border-color: var(--color-accent); color: var(--color-accent); }
   .star-btn .star-icon::before { content: "\\2606"; }
   .star-btn.starred .star-icon::before { content: "\\2605"; }
   .star-btn:disabled { opacity: 0.4; cursor: default; }
@@ -143,49 +204,49 @@ export function layout(title: string, body: string, user: User | null = null): s
     margin-top: 0.5rem; justify-content: space-between;
   }
   .share-link {
-    font-size: 0.85rem; color: #555; text-decoration: none;
+    font-size: 0.85rem; color: var(--color-text-dim); text-decoration: none;
     padding: 2px 4px; border-radius: 4px;
     transition: color 0.15s;
   }
-  .share-link:hover { color: #6cb4ee; text-decoration: none; }
+  .share-link:hover { color: var(--color-link); text-decoration: none; }
   .sort-toggle {
-    display: inline-flex; font-size: 0.8rem; border: 1px solid #333;
+    display: inline-flex; font-size: 0.8rem; border: 1px solid var(--color-border-subtle);
     border-radius: 6px; overflow: hidden;
   }
   .sort-toggle button {
-    background: none; border: none; color: #888; padding: 0.3rem 0.75rem;
+    background: none; border: none; color: var(--color-text-faint); padding: 0.3rem 0.75rem;
     cursor: pointer; font-size: 0.8rem;
   }
-  .sort-toggle button:not(:last-child) { border-right: 1px solid #333; }
-  .sort-toggle button.active { background: #2a2a4a; color: #fff; }
-  .sort-toggle button:hover { color: #ccc; }
-  .breadcrumb { font-size: 0.85rem; color: #888; margin-bottom: 1rem; }
-  .breadcrumb a { color: #6cb4ee; }
+  .sort-toggle button:not(:last-child) { border-right: 1px solid var(--color-border-subtle); }
+  .sort-toggle button.active { background: var(--color-sort-active-bg); color: var(--color-text-strong); }
+  .sort-toggle button:hover { color: var(--color-text-muted); }
+  .breadcrumb { font-size: 0.85rem; color: var(--color-text-faint); margin-bottom: 1rem; }
+  .breadcrumb a { color: var(--color-link); }
   footer {
-    text-align: center; padding: 2rem; font-size: 0.8rem; color: #555;
-    border-top: 1px solid #1a1a2e; margin-top: 3rem;
+    text-align: center; padding: 2rem; font-size: 0.8rem; color: var(--color-text-dim);
+    border-top: 1px solid var(--color-surface); margin-top: 3rem;
   }
   .mod-table {
     width: 100%; border-collapse: collapse; font-size: 0.9rem;
   }
   .mod-table th {
-    text-align: left; padding: 0.5rem 0.75rem; border-bottom: 2px solid #2a2a4a;
-    color: #888; font-weight: 600; font-size: 0.8rem; text-transform: uppercase;
+    text-align: left; padding: 0.5rem 0.75rem; border-bottom: 2px solid var(--color-border);
+    color: var(--color-text-faint); font-weight: 600; font-size: 0.8rem; text-transform: uppercase;
     letter-spacing: 0.05em;
   }
   .mod-table td {
-    padding: 0.5rem 0.75rem; border-bottom: 1px solid #1a1a2e;
+    padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--color-surface);
   }
-  .mod-table tr:hover td { background: #1a1a2e; }
+  .mod-table tr:hover td { background: var(--color-surface); }
   .mod-table .course-header td {
     padding: 1rem 0.75rem 0.5rem; font-weight: 700; font-size: 1rem;
-    color: #fff; border-bottom: 1px solid #2a2a4a; background: none;
+    color: var(--color-text-strong); border-bottom: 1px solid var(--color-border); background: none;
   }
   .mod-badge {
     display: inline-block; font-size: 0.75rem; font-weight: 600;
     padding: 1px 6px; border-radius: 3px;
   }
-  .mod-badge-warn { background: #e53e3e22; color: #e53e3e; }
+  .mod-badge-warn { background: #e53e3e22; color: var(--color-danger); }
 </style>
 </head>
 <body>
@@ -195,12 +256,12 @@ export function layout(title: string, body: string, user: User | null = null): s
     ${
       user
         ? `<img src="${esc(user.picture)}" alt=""> ${esc(user.name.split(" ")[0])} <a href="/auth/logout">Sign out</a>`
-        : `<a href="/auth/login" class="btn btn-google">Sign in with Google</a>`
+        : `<a href="/auth/login" class="btn btn-google" style="color:#333;">Sign in with Google</a>`
     }
   </nav>
 </header>
 <main>${body}</main>
-<footer>${SITE_NAME} — <a href="https://github.com/rndmcnlly/democlips-gallery" style="color:#666;">source on GitHub</a></footer>
+<footer>${SITE_NAME} — <a href="https://github.com/rndmcnlly/democlips-gallery">source on GitHub</a></footer>
 </body>
 </html>`;
 }
@@ -286,19 +347,19 @@ export function playerScript(): string {
   <iframe id="player-iframe" allow="autoplay; fullscreen" allowfullscreen></iframe>
 </div>
 <div class="player-overlay" id="edit-overlay">
-  <div style="background:#1a1a2e; border-radius:8px; padding:1.5rem; width:100%; max-width:420px; position:relative;">
+  <div style="background:var(--color-surface); border-radius:8px; padding:1.5rem; width:100%; max-width:420px; position:relative;">
     <button class="close-btn" onclick="closeEdit()" style="position:absolute; top:0.5rem; right:0.75rem; font-size:1.5rem;">&times;</button>
     <h2 style="margin:0 0 1rem;">Edit clip details</h2>
     <input type="hidden" id="edit-video-id">
     <label style="display:block; margin:0.75rem 0 0.25rem; font-weight:500;">Link</label>
-    <input type="text" id="edit-url" placeholder="https://" style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid #333; background:#0f0f0f; color:#e0e0e0; font-size:0.9rem;">
+    <input type="text" id="edit-url" placeholder="https://" style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid var(--color-input-border); background:var(--color-page-bg); color:var(--color-text); font-size:0.9rem;">
     <label style="display:block; margin:0.75rem 0 0.25rem; font-weight:500;">Title</label>
-    <input type="text" id="edit-title" placeholder="optional" style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid #333; background:#0f0f0f; color:#e0e0e0; font-size:0.9rem;">
+    <input type="text" id="edit-title" placeholder="optional" style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid var(--color-input-border); background:var(--color-page-bg); color:var(--color-text); font-size:0.9rem;">
     <label style="display:block; margin:0.75rem 0 0.25rem; font-weight:500;">Description</label>
-    <textarea id="edit-description" placeholder="optional" style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid #333; background:#0f0f0f; color:#e0e0e0; font-size:0.9rem; resize:vertical; min-height:60px;"></textarea>
+    <textarea id="edit-description" placeholder="optional" style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid var(--color-input-border); background:var(--color-page-bg); color:var(--color-text); font-size:0.9rem; resize:vertical; min-height:60px;"></textarea>
     <div style="margin-top:1rem; display:flex; gap:0.75rem;">
       <button class="btn btn-primary" id="edit-save-btn" onclick="saveEdit()">Save</button>
-      <button class="btn" onclick="closeEdit()" style="color:#888;">Cancel</button>
+      <button class="btn" onclick="closeEdit()" style="color:var(--color-text-faint);">Cancel</button>
     </div>
   </div>
 </div>

@@ -20,20 +20,20 @@ pageRoutes.get("/", (c) => {
   const moderator = isModerator(c.env, user);
 
   const cta = user
-    ? `<p style="color:#888; margin-top:2rem;">
+    ? `<p style="color:var(--color-text-faint); margin-top:2rem;">
           Use the link your instructor gave you to go to your course's assignment gallery.
         </p>
         <p style="margin-top:1.5rem;">
-          <a href="/onboarding" style="color:#6cb4ee;">Instructor? Set up your gallery &rarr;</a>
+          <a href="/onboarding">Instructor? Set up your gallery &rarr;</a>
         </p>
-        ${moderator ? `<p style="margin-top:1rem;"><a href="/moderation" class="btn btn-primary" style="background:#7c3aed;">Moderation Dashboard</a></p>` : ""}`
+        ${moderator ? `<p style="margin-top:1rem;"><a href="/moderation" class="btn btn-primary">Moderation Dashboard</a></p>` : ""}`
     : `<p style="margin-top:2rem;">
           <a href="/auth/login" class="btn btn-primary">Sign in with your @ucsc.edu account</a>
         </p>`;
 
   const body = `<div style="text-align:center; padding: 4rem 0;">
-        <h1 style="font-size:2rem;">Demo<span style="color:#f7931a">Clips</span></h1>
-        <p style="color:#aaa; max-width:450px; margin:1rem auto;">
+        <h1 style="font-size:2rem;">Demo<span style="color:var(--color-accent)">Clips</span></h1>
+        <p style="color:var(--color-text-muted); max-width:450px; margin:1rem auto;">
           Share short video clips of your computational media projects with your classmates.
           See what others are building. Get inspired.
         </p>
@@ -75,64 +75,64 @@ pageRoutes.get("/onboarding", requireAuth, async (c) => {
           const profile = modProfiles.get(e);
           if (profile) {
             return `<a href="mailto:${esc(e)}" style="display:inline-flex; align-items:center; gap:0.5rem;
-              text-decoration:none; color:#e0e0e0; background:#1a1a2e; border:1px solid #2a2a4a;
+              text-decoration:none; color:var(--color-text); background:var(--color-surface); border:1px solid var(--color-border);
               border-radius:8px; padding:0.4rem 0.75rem 0.4rem 0.4rem; margin:0.25rem 0;">
               <img src="${esc(profile.picture)}" style="width:24px; height:24px; border-radius:50%;">
               <span>${esc(profile.name)}</span>
-              <span style="color:#888; font-size:0.8rem;">${esc(e)}</span>
+              <span style="color:var(--color-text-faint); font-size:0.8rem;">${esc(e)}</span>
             </a>`;
           }
-          return `<a href="mailto:${esc(e)}" style="color:#6cb4ee;">${esc(e)}</a>`;
+          return `<a href="mailto:${esc(e)}">${esc(e)}</a>`;
         })
         .join(" ")
-    : `<span style="color:#888;">(none configured)</span>`;
+    : `<span style="color:var(--color-text-faint);">(none configured)</span>`;
 
   const body = `
     <div class="breadcrumb"><a href="/">Home</a> / Instructor Onboarding</div>
 
     <div style="max-width:640px; margin:2rem auto;">
       <h1 style="font-size:1.5rem; margin-bottom:0.5rem;">Instructor Onboarding</h1>
-      <p style="color:#aaa; margin-bottom:2rem;">
+      <p style="color:var(--color-text-muted); margin-bottom:2rem;">
         Set up a DemoClips gallery for your Canvas assignment in three steps.
       </p>
 
-      <h2 style="font-size:1.1rem; color:#f7931a; margin-bottom:0.5rem;">Step 1 &mdash; Paste your Canvas assignment URL</h2>
-      <p style="color:#aaa; font-size:0.9rem; margin-bottom:0.75rem;">
+      <h2 style="font-size:1.1rem; color:var(--color-accent); margin-bottom:0.5rem;">Step 1 &mdash; Paste your Canvas assignment URL</h2>
+      <p style="color:var(--color-text-muted); font-size:0.9rem; margin-bottom:0.75rem;">
         Open the assignment in Canvas and copy the full URL from your browser's address bar.
         It should look like:<br>
-        <code style="color:#888; font-size:0.85rem;">https://canvas.ucsc.edu/courses/<b style="color:#6cb4ee;">12345</b>/assignments/<b style="color:#6cb4ee;">67890</b></code>
+        <code style="color:var(--color-text-faint); font-size:0.85rem;">https://canvas.ucsc.edu/courses/<b style="color:var(--color-link);">12345</b>/assignments/<b style="color:var(--color-link);">67890</b></code>
       </p>
       <input
         type="text" id="canvas-url"
         placeholder="https://canvas.ucsc.edu/courses/…/assignments/…"
-        style="width:100%; padding:0.6rem 0.75rem; background:#111; border:1px solid #333;
-               border-radius:6px; color:#e0e0e0; font-size:0.95rem; box-sizing:border-box;"
+        style="width:100%; padding:0.6rem 0.75rem; background:var(--color-surface-alt); border:1px solid var(--color-border-subtle);
+               border-radius:6px; color:var(--color-text); font-size:0.95rem; box-sizing:border-box;"
       >
-      <p id="parse-error" style="color:#e53e3e; font-size:0.85rem; margin-top:0.4rem; display:none;"></p>
+      <p id="parse-error" style="color:var(--color-danger); font-size:0.85rem; margin-top:0.4rem; display:none;"></p>
 
       <div id="result" style="display:none; margin-top:1.5rem;">
-        <h2 style="font-size:1.1rem; color:#f7931a; margin-bottom:0.5rem;">Step 2 &mdash; Share this gallery link with students</h2>
-        <p style="color:#aaa; font-size:0.9rem; margin-bottom:0.5rem;">
+        <h2 style="font-size:1.1rem; color:var(--color-accent); margin-bottom:0.5rem;">Step 2 &mdash; Share this gallery link with students</h2>
+        <p style="color:var(--color-text-muted); font-size:0.9rem; margin-bottom:0.5rem;">
           Students who visit this link will be prompted to sign in with their @ucsc.edu account,
           then they can upload a clip or browse the gallery.
         </p>
-        <div style="background:#111; border:1px solid #333; border-radius:6px; padding:0.6rem 0.75rem;
+        <div style="background:var(--color-surface-alt); border:1px solid var(--color-border-subtle); border-radius:6px; padding:0.6rem 0.75rem;
                     display:flex; align-items:center; gap:0.5rem;">
-          <code id="gallery-url" style="flex:1; word-break:break-all; color:#6cb4ee; font-size:0.9rem;"></code>
+          <code id="gallery-url" style="flex:1; word-break:break-all; color:var(--color-link); font-size:0.9rem;"></code>
           <button id="copy-btn" onclick="copyUrl()" class="btn btn-primary"
                   style="flex-shrink:0; font-size:0.8rem; padding:0.35rem 0.75rem;">Copy</button>
         </div>
 
-        <h2 style="font-size:1.1rem; color:#f7931a; margin-top:2rem; margin-bottom:0.5rem;">Step 3 &mdash; Know how moderation works</h2>
-        <p style="color:#aaa; font-size:0.9rem; margin-bottom:0.5rem;">
+        <h2 style="font-size:1.1rem; color:var(--color-accent); margin-top:2rem; margin-bottom:0.5rem;">Step 3 &mdash; Know how moderation works</h2>
+        <p style="color:var(--color-text-muted); font-size:0.9rem; margin-bottom:0.5rem;">
           Students can upload one clip per assignment. They can delete and re-upload their own clip,
           but they <strong>cannot</strong> hide other students' clips.
         </p>
-        <p style="color:#aaa; font-size:0.9rem; margin-bottom:0.5rem;">
+        <p style="color:var(--color-text-muted); font-size:0.9rem; margin-bottom:0.5rem;">
           Only <strong>moderators</strong> can hide clips (e.g. for policy violations). Hidden clips
           are not deleted &mdash; they're just invisible to non-moderators and can be un-hidden later.
         </p>
-        <p style="color:#aaa; font-size:0.9rem; margin-bottom:0.5rem;">
+        <p style="color:var(--color-text-muted); font-size:0.9rem; margin-bottom:0.5rem;">
           If you need a clip hidden, or if you'd like moderator access yourself,
           contact a current moderator:
         </p>
@@ -246,7 +246,7 @@ pageRoutes.get("/moderation", requireAuth, async (c) => {
   const body = `
     <div class="breadcrumb"><a href="/">Home</a> / Moderation</div>
     <h1>Moderation Dashboard</h1>
-    <p style="color:#888;">Per-assignment summary across all courses. Click an assignment to open its gallery.</p>
+    <p style="color:var(--color-text-faint);">Per-assignment summary across all courses. Click an assignment to open its gallery.</p>
     ${rows.length === 0
       ? `<div class="empty-state"><p>No clips in the system yet.</p></div>`
       : `<table class="mod-table">
@@ -306,7 +306,7 @@ pageRoutes.get("/v/:videoId{[0-9a-fA-F-]+}", requireAuth, async (c) => {
           allow="autoplay; fullscreen" allowfullscreen>
         </iframe>
       </div>`
-    : `<div style="text-align:center; padding:3rem; color:#888; font-style:italic; background:#111; border-radius:8px; margin-bottom:1.5rem;">
+    : `<div style="text-align:center; padding:3rem; color:var(--color-text-faint); font-style:italic; background:var(--color-surface-alt); border-radius:8px; margin-bottom:1.5rem;">
         Video is still processing&hellip; check back shortly.
       </div>`;
 
@@ -343,8 +343,8 @@ pageRoutes.get("/v/:videoId{[0-9a-fA-F-]+}", requireAuth, async (c) => {
     <div style="max-width:960px; margin:0 auto;">
       <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
         <div>
-          ${video.title ? `<h1 style="margin:0 0 0.25rem;">${esc(video.title)}${hiddenLabel}</h1>` : `<h1 style="margin:0 0 0.25rem; color:#888; font-style:italic;">Untitled clip${hiddenLabel}</h1>`}
-          <div style="color:#888; font-size:0.9rem; display:flex; align-items:center; gap:0.5rem;">
+          ${video.title ? `<h1 style="margin:0 0 0.25rem;">${esc(video.title)}${hiddenLabel}</h1>` : `<h1 style="margin:0 0 0.25rem; color:var(--color-text-faint); font-style:italic;">Untitled clip${hiddenLabel}</h1>`}
+          <div style="color:var(--color-text-faint); font-size:0.9rem; display:flex; align-items:center; gap:0.5rem;">
             <img src="${esc(video.user_picture || "")}" style="width:22px; height:22px; border-radius:50%;" alt="">
             ${esc(video.user_name)} &middot; ${fmtDate(video.created_at)}${durationStr}
           </div>
@@ -355,25 +355,25 @@ pageRoutes.get("/v/:videoId{[0-9a-fA-F-]+}", requireAuth, async (c) => {
           ${deleteBtn}
         </div>
       </div>
-      ${video.description ? `<p id="clip-desc" style="color:#aaa; margin-top:0.75rem;">${esc(video.description)}</p>` : ""}
+      ${video.description ? `<p id="clip-desc" style="color:var(--color-text-muted); margin-top:0.75rem;">${esc(video.description)}</p>` : ""}
       ${urlHtml}
       ${isOwner ? `
-      <div id="edit-form" style="display:none; margin-top:1rem; background:#1a1a2e; border-radius:8px; padding:1.25rem;">
+      <div id="edit-form" style="display:none; margin-top:1rem; background:var(--color-surface); border-radius:8px; padding:1.25rem;">
         <h3 style="margin:0 0 0.75rem;">Edit clip details</h3>
         <label style="display:block; margin:0.5rem 0 0.25rem; font-weight:500;">Link</label>
-        <input type="text" id="edit-url" placeholder="https://" value="${esc(video.url)}" style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid #333; background:#0f0f0f; color:#e0e0e0; font-size:0.9rem; box-sizing:border-box;">
+        <input type="text" id="edit-url" placeholder="https://" value="${esc(video.url)}" style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid var(--color-input-border); background:var(--color-page-bg); color:var(--color-text); font-size:0.9rem; box-sizing:border-box;">
         <label style="display:block; margin:0.5rem 0 0.25rem; font-weight:500;">Title</label>
-        <input type="text" id="edit-title" placeholder="optional" value="${esc(video.title)}" style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid #333; background:#0f0f0f; color:#e0e0e0; font-size:0.9rem; box-sizing:border-box;">
+        <input type="text" id="edit-title" placeholder="optional" value="${esc(video.title)}" style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid var(--color-input-border); background:var(--color-page-bg); color:var(--color-text); font-size:0.9rem; box-sizing:border-box;">
         <label style="display:block; margin:0.5rem 0 0.25rem; font-weight:500;">Description</label>
-        <textarea id="edit-description" placeholder="optional" style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid #333; background:#0f0f0f; color:#e0e0e0; font-size:0.9rem; resize:vertical; min-height:60px; box-sizing:border-box;">${esc(video.description)}</textarea>
+        <textarea id="edit-description" placeholder="optional" style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid var(--color-input-border); background:var(--color-page-bg); color:var(--color-text); font-size:0.9rem; resize:vertical; min-height:60px; box-sizing:border-box;">${esc(video.description)}</textarea>
         <div style="margin-top:0.75rem; display:flex; gap:0.75rem;">
           <button class="btn btn-primary" id="edit-save-btn" onclick="saveEdit()">Save</button>
-          <button class="btn" onclick="closeEdit()" style="color:#888;">Cancel</button>
+          <button class="btn" onclick="closeEdit()" style="color:var(--color-text-faint);">Cancel</button>
         </div>
       </div>
       ` : ""}
       <p style="margin-top:1.5rem;">
-        <a href="${galleryUrl}" style="color:#6cb4ee;">&larr; Back to assignment gallery</a>
+        <a href="${galleryUrl}">&larr; Back to assignment gallery</a>
       </p>
     </div>
     <script>
@@ -463,7 +463,7 @@ pageRoutes.get("/v/:videoId{[0-9a-fA-F-]+}", requireAuth, async (c) => {
               h1.style.fontStyle = '';
             } else {
               h1.innerHTML = 'Untitled clip' + hiddenHtml;
-              h1.style.color = '#888';
+              h1.style.color = 'var(--color-text-faint)';
               h1.style.fontStyle = 'italic';
             }
           }
@@ -476,7 +476,7 @@ pageRoutes.get("/v/:videoId{[0-9a-fA-F-]+}", requireAuth, async (c) => {
               if (editForm) {
                 var p = document.createElement('p');
                 p.id = 'clip-desc';
-                p.style.color = '#aaa';
+                p.style.color = 'var(--color-text-muted)';
                 p.style.marginTop = '0.75rem';
                 p.textContent = desc;
                 editForm.parentNode.insertBefore(p, editForm);
@@ -569,7 +569,7 @@ pageRoutes.get("/:courseId{[0-9a-fA-F-]+}/:assignmentId{[0-9a-fA-F-]+}", require
   const ownClip = videos.find((v) => v.user_id === user.sub);
   const uploadLabel = ownClip ? "Replace your clip" : "Upload a clip";
   const editYourClipBtn = ownClip
-    ? `<button class="btn" onclick="editYourClip()" style="background:#1a1a2e; border:1px solid #2a2a4a; color:#e0e0e0;">Edit your clip</button>`
+    ? `<button class="btn" onclick="editYourClip()" style="background:var(--color-surface); border:1px solid var(--color-border); color:var(--color-text);">Edit your clip</button>`
     : "";
   const body = `
     <div class="breadcrumb">
@@ -583,7 +583,7 @@ pageRoutes.get("/:courseId{[0-9a-fA-F-]+}/:assignmentId{[0-9a-fA-F-]+}", require
       </div>
     </div>
     <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem; margin-top:0.5rem;">
-      <p style="color:#888; margin:0;">Course ${esc(courseId)} &middot; ${videos.length} clip${videos.length !== 1 ? "s" : ""}</p>
+      <p style="color:var(--color-text-faint); margin:0;">Course ${esc(courseId)} &middot; ${videos.length} clip${videos.length !== 1 ? "s" : ""}</p>
       ${videos.length > 1 ? `<div class="sort-toggle">
         <button class="active" onclick="sortCards('newest', this)">Newest</button>
         <button onclick="sortCards('stars', this)">Most starred</button>
@@ -597,7 +597,7 @@ pageRoutes.get("/:courseId{[0-9a-fA-F-]+}/:assignmentId{[0-9a-fA-F-]+}", require
       if (card) {
         card.scrollIntoView({ behavior: 'smooth', block: 'center' });
         // Brief highlight then open edit overlay
-        card.style.outline = '2px solid #f7931a';
+        card.style.outline = '2px solid var(--color-accent)';
         setTimeout(function() { card.style.outline = ''; }, 1500);
         var editBtn = card.querySelector('.delete-btn[title="Edit details"]');
         if (editBtn) editBtn.click();
@@ -635,85 +635,85 @@ pageRoutes.get(
       upload
     </div>
     <h1>Upload a Clip</h1>
-    <p style="color:#888;">Assignment ${esc(assignmentId)} in course ${esc(courseId)}</p>
-    ${existing ? `<p style="color:#f7931a; font-size:0.9rem;">You already have a clip for this assignment. Uploading a new file will replace it.</p>` : ""}
+    <p style="color:var(--color-text-faint);">Assignment ${esc(assignmentId)} in course ${esc(courseId)}</p>
+    ${existing ? `<p style="color:var(--color-accent); font-size:0.9rem;">You already have a clip for this assignment. Uploading a new file will replace it.</p>` : ""}
 
     <div style="display:grid; gap:1.5rem; margin-top:1.5rem;">
 
-      <section style="background:#1a1a2e; border:1px solid #2a2a4a; border-radius:8px; padding:1.25rem;">
-        <h2 style="font-size:1rem; margin:0 0 0.5rem; color:#fff;">Option A &mdash; Upload a file</h2>
-        <p style="color:#888; font-size:0.85rem; margin:0 0 0.75rem;">Select a video file from your computer (.webm, .mp4 &mdash; max 500 MB).</p>
+      <section style="background:var(--color-surface); border:1px solid var(--color-border); border-radius:8px; padding:1.25rem;">
+        <h2 style="font-size:1rem; margin:0 0 0.5rem; color:var(--color-text-strong);">Option A &mdash; Upload a file</h2>
+        <p style="color:var(--color-text-faint); font-size:0.85rem; margin:0 0 0.75rem;">Select a video file from your computer (.webm, .mp4 &mdash; max 500 MB).</p>
         <div class="upload-form" style="max-width:none;">
           <input type="file" id="file" name="file" accept="video/webm,video/mp4,video/*" style="margin:0;">
         </div>
       </section>
 
-      <section id="capture-section" style="background:#1a1a2e; border:1px solid #2a2a4a; border-radius:8px; padding:1.25rem;">
-        <h2 style="font-size:1rem; margin:0 0 0.5rem; color:#fff;">Option B &mdash; Record your screen</h2>
-        <p style="color:#888; font-size:0.85rem; margin:0 0 0.75rem;">
+      <section id="capture-section" style="background:var(--color-surface); border:1px solid var(--color-border); border-radius:8px; padding:1.25rem;">
+        <h2 style="font-size:1rem; margin:0 0 0.5rem; color:var(--color-text-strong);">Option B &mdash; Record your screen</h2>
+        <p style="color:var(--color-text-faint); font-size:0.85rem; margin:0 0 0.75rem;">
           Capture a window, tab, or entire screen directly in the browser.
           Your browser will ask what to share; recording starts immediately.
         </p>
         <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center;">
           <button class="btn btn-primary" id="start-capture-btn" onclick="startScreenCapture()" style="font-size:0.85rem; padding:0.4rem 1rem;">Start recording</button>
-          <button class="btn" id="stop-capture-btn" onclick="stopScreenCapture()" style="display:none; font-size:0.85rem; padding:0.4rem 1rem; background:#e53e3e; color:#fff;">Stop recording</button>
-          <span id="capture-timer" style="color:#f7931a; font-size:0.85rem; font-variant-numeric:tabular-nums; display:none;"></span>
-          <span id="capture-status" style="color:#888; font-size:0.85rem;"></span>
+          <button class="btn" id="stop-capture-btn" onclick="stopScreenCapture()" style="display:none; font-size:0.85rem; padding:0.4rem 1rem; background:var(--color-danger); color:#fff;">Stop recording</button>
+          <span id="capture-timer" style="color:var(--color-accent); font-size:0.85rem; font-variant-numeric:tabular-nums; display:none;"></span>
+          <span id="capture-status" style="color:var(--color-text-faint); font-size:0.85rem;"></span>
         </div>
-        <p style="color:#666; font-size:0.75rem; margin:0.75rem 0 0;">
+        <p style="color:var(--color-text-faintest); font-size:0.75rem; margin:0.75rem 0 0;">
           Records at up to 720p using VP8/WebM for reasonable file sizes.
         </p>
-        <div id="capture-preview" style="display:none; margin-top:1rem; border-top:1px solid #2a2a4a; padding-top:1rem;">
+        <div id="capture-preview" style="display:none; margin-top:1rem; border-top:1px solid var(--color-border); padding-top:1rem;">
           <video id="preview-video" controls playsinline style="width:100%; max-height:400px; border-radius:6px; background:#000;"></video>
-          <p id="capture-size-warning" style="display:none; color:#f7931a; font-size:0.85rem; margin:0.75rem 0 0;">
+          <p id="capture-size-warning" style="display:none; color:var(--color-accent); font-size:0.85rem; margin:0.75rem 0 0;">
             This recording is quite large. Consider recording a shorter, more focused demo to keep upload times reasonable.
           </p>
           <div style="margin-top:0.75rem; display:flex; gap:0.75rem; align-items:center;">
             <button class="btn btn-primary" id="accept-recording-btn" onclick="acceptRecording()" style="font-size:0.85rem; padding:0.4rem 1rem;">Upload this recording</button>
-            <button class="btn" id="discard-recording-btn" onclick="discardRecording()" style="font-size:0.85rem; padding:0.4rem 1rem; color:#e53e3e; border-color:#e53e3e;">Discard</button>
+            <button class="btn" id="discard-recording-btn" onclick="discardRecording()" style="font-size:0.85rem; padding:0.4rem 1rem; color:var(--color-danger); border-color:var(--color-danger);">Discard</button>
           </div>
         </div>
       </section>
 
-      <section style="background:#1a1a2e; border:1px solid #2a2a4a; border-radius:8px; padding:1.25rem;">
-        <h2 style="font-size:1rem; margin:0 0 0.5rem; color:#fff;">Option C &mdash; Upload from an external tool</h2>
-        <p style="color:#888; font-size:0.85rem; margin:0 0 0.75rem;">
+      <section style="background:var(--color-surface); border:1px solid var(--color-border); border-radius:8px; padding:1.25rem;">
+        <h2 style="font-size:1rem; margin:0 0 0.5rem; color:var(--color-text-strong);">Option C &mdash; Upload from an external tool</h2>
+        <p style="color:var(--color-text-faint); font-size:0.85rem; margin:0 0 0.75rem;">
           Generate a temporary upload link you can paste into a Unity script,
           curl, or any tool that can POST a video file. Expires in 24 hours.
         </p>
         <button class="btn btn-primary" id="gen-key-btn" onclick="generateKey()" style="font-size:0.85rem; padding:0.4rem 1rem;">Generate upload link</button>
         <div id="key-result" style="display:none; margin-top:0.75rem;">
-          <div style="background:#111; border:1px solid #333; border-radius:6px; padding:0.5rem 0.75rem; display:flex; align-items:center; gap:0.5rem;">
-            <code id="key-url" style="flex:1; word-break:break-all; color:#6cb4ee; font-size:0.8rem;"></code>
+          <div style="background:var(--color-surface-alt); border:1px solid var(--color-border-subtle); border-radius:6px; padding:0.5rem 0.75rem; display:flex; align-items:center; gap:0.5rem;">
+            <code id="key-url" style="flex:1; word-break:break-all; color:var(--color-link); font-size:0.8rem;"></code>
             <button onclick="copyText('key-url', this)" class="btn btn-primary" style="flex-shrink:0; font-size:0.75rem; padding:0.25rem 0.5rem;">Copy</button>
           </div>
-          <p style="color:#666; font-size:0.8rem; margin-top:0.5rem;">Expires in 24 hours. Uploading replaces any existing clip.</p>
+          <p style="color:var(--color-text-faintest); font-size:0.8rem; margin-top:0.5rem;">Expires in 24 hours. Uploading replaces any existing clip.</p>
         </div>
       </section>
 
-      <section style="background:#1a1a2e; border:1px solid #2a2a4a; border-radius:8px; padding:1.25rem;">
-        <h2 style="font-size:1rem; margin:0 0 0.5rem; color:#fff;">Option D &mdash; Stream via OBS</h2>
-        <p style="color:#888; font-size:0.85rem; margin:0 0 0.75rem;">
+      <section style="background:var(--color-surface); border:1px solid var(--color-border); border-radius:8px; padding:1.25rem;">
+        <h2 style="font-size:1rem; margin:0 0 0.5rem; color:var(--color-text-strong);">Option D &mdash; Stream via OBS</h2>
+        <p style="color:var(--color-text-faint); font-size:0.85rem; margin:0 0 0.75rem;">
           Get an RTMPS stream key for OBS or any RTMP-capable tool.
           Start streaming, then stop when done. Your clip will appear
           on the assignment page within about a minute.
         </p>
         <button class="btn btn-primary" id="gen-stream-btn" onclick="generateStreamKey()" style="font-size:0.85rem; padding:0.4rem 1rem;">Generate stream key</button>
         <div id="stream-result" style="display:none; margin-top:0.75rem;">
-          <label style="display:block; font-size:0.8rem; color:#888; margin-bottom:0.25rem;">Server URL</label>
-          <div style="background:#111; border:1px solid #333; border-radius:6px; padding:0.5rem 0.75rem; display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">
-            <code id="stream-url" style="flex:1; word-break:break-all; color:#6cb4ee; font-size:0.8rem;"></code>
+          <label style="display:block; font-size:0.8rem; color:var(--color-text-faint); margin-bottom:0.25rem;">Server URL</label>
+          <div style="background:var(--color-surface-alt); border:1px solid var(--color-border-subtle); border-radius:6px; padding:0.5rem 0.75rem; display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">
+            <code id="stream-url" style="flex:1; word-break:break-all; color:var(--color-link); font-size:0.8rem;"></code>
             <button onclick="copyText('stream-url', this)" class="btn btn-primary" style="flex-shrink:0; font-size:0.75rem; padding:0.25rem 0.5rem;">Copy</button>
           </div>
-          <label style="display:block; font-size:0.8rem; color:#888; margin-bottom:0.25rem;">Stream Key</label>
-          <div style="background:#111; border:1px solid #333; border-radius:6px; padding:0.5rem 0.75rem; display:flex; align-items:center; gap:0.5rem;">
-            <code id="stream-key" style="flex:1; word-break:break-all; color:#6cb4ee; font-size:0.8rem;"></code>
+          <label style="display:block; font-size:0.8rem; color:var(--color-text-faint); margin-bottom:0.25rem;">Stream Key</label>
+          <div style="background:var(--color-surface-alt); border:1px solid var(--color-border-subtle); border-radius:6px; padding:0.5rem 0.75rem; display:flex; align-items:center; gap:0.5rem;">
+            <code id="stream-key" style="flex:1; word-break:break-all; color:var(--color-link); font-size:0.8rem;"></code>
             <button onclick="copyText('stream-key', this)" class="btn btn-primary" style="flex-shrink:0; font-size:0.75rem; padding:0.25rem 0.5rem;">Copy</button>
           </div>
-          <p style="color:#666; font-size:0.8rem; margin-top:0.5rem;">
+          <p style="color:var(--color-text-faintest); font-size:0.8rem; margin-top:0.5rem;">
             In OBS: Settings &rarr; Stream &rarr; Service: Custom &rarr; paste the URL and key above.
             When you stop streaming, a recording will be saved automatically.
-            Return to the <a href="${galleryUrl}" style="color:#6cb4ee;">assignment page</a>
+            Return to the <a href="${galleryUrl}">assignment page</a>
             after about a minute to find and edit your clip.
           </p>
         </div>
@@ -721,17 +721,17 @@ pageRoutes.get(
 
     </div>
 
-    <div id="progress-section" style="display:none; margin-top:1.5rem; background:#1a1a2e; border:1px solid #2a2a4a; border-radius:8px; padding:1.25rem;">
-      <div id="progress-bar" style="height:8px; background:#333; border-radius:4px; overflow:hidden;">
-        <div id="progress-fill" style="height:100%; background:#2563eb; width:0%; transition:width 0.3s;"></div>
+    <div id="progress-section" style="display:none; margin-top:1.5rem; background:var(--color-surface); border:1px solid var(--color-border); border-radius:8px; padding:1.25rem;">
+      <div id="progress-bar" style="height:8px; background:var(--color-border-subtle); border-radius:4px; overflow:hidden;">
+        <div id="progress-fill" style="height:100%; background:var(--color-btn-primary-bg); width:0%; transition:width 0.3s;"></div>
       </div>
-      <div id="progress-text" style="font-size:0.85rem; color:#888; margin-top:0.25rem;">Uploading...</div>
+      <div id="progress-text" style="font-size:0.85rem; color:var(--color-text-faint); margin-top:0.25rem;">Uploading...</div>
     </div>
 
     <div id="metadata-section" class="upload-form" style="display:none; margin-top:1.5rem;">
-      <p style="color:#888; font-size:0.85rem; margin:0 0 1rem;">Optional &mdash; you can always edit this later from the gallery.</p>
+      <p style="color:var(--color-text-faint); font-size:0.85rem; margin:0 0 1rem;">Optional &mdash; you can always edit this later from the gallery.</p>
 
-      <label for="url">Link <span style="color:#666; font-weight:normal;">(playable game, GitHub, etc.)</span></label>
+      <label for="url">Link <span style="color:var(--color-text-faintest); font-weight:normal;">(playable game, GitHub, etc.)</span></label>
       <input type="text" id="url" name="url" placeholder="https://">
 
       <label for="title">Title</label>
@@ -742,8 +742,8 @@ pageRoutes.get(
 
       <div style="margin-top:1.25rem; display:flex; gap:0.75rem; align-items:center;">
         <button class="btn btn-primary" id="save-btn" onclick="saveMetadata()" disabled>Save details</button>
-        <a href="${galleryUrl}" id="skip-link" style="color:#888; font-size:0.85rem; display:none;">Skip &mdash; go to gallery</a>
-        <span id="upload-pending-hint" style="color:#666; font-size:0.85rem;">Upload in progress...</span>
+        <a href="${galleryUrl}" id="skip-link" style="color:var(--color-text-faint); font-size:0.85rem; display:none;">Skip &mdash; go to gallery</a>
+        <span id="upload-pending-hint" style="color:var(--color-text-faintest); font-size:0.85rem;">Upload in progress...</span>
       </div>
     </div>
 
@@ -865,7 +865,7 @@ pageRoutes.get(
         },
         onError: function(err) {
           progressText.textContent = 'Upload failed: ' + err.message;
-          progressText.style.color = '#e53e3e';
+          progressText.style.color = 'var(--color-danger)';
         },
         onProgress: function(bytesUploaded, bytesTotal) {
           var pct = Math.round((bytesUploaded / bytesTotal) * 100);
@@ -877,7 +877,7 @@ pageRoutes.get(
         onSuccess: function() {
           uploadDone = true;
           progressText.textContent = 'Upload complete!';
-          progressText.style.color = '#22c55e';
+          progressText.style.color = 'var(--color-success)';
           progressFill.style.width = '100%';
           document.getElementById('save-btn').disabled = false;
           document.getElementById('skip-link').style.display = '';
@@ -914,7 +914,7 @@ pageRoutes.get(
 
       var status = document.getElementById('capture-status');
       status.textContent = 'Requesting access...';
-      status.style.color = '#888';
+      status.style.color = 'var(--color-text-faint)';
 
       navigator.mediaDevices.getDisplayMedia({
         video: {
@@ -959,7 +959,7 @@ pageRoutes.get(
 
           if (recordedChunks.length === 0) {
             status.textContent = 'No data recorded.';
-            status.style.color = '#e53e3e';
+            status.style.color = 'var(--color-danger)';
             document.getElementById('start-capture-btn').disabled = false;
             return;
           }
@@ -969,7 +969,7 @@ pageRoutes.get(
 
           var sizeMB = (blob.size / 1024 / 1024).toFixed(1);
           status.textContent = 'Recording complete (' + sizeMB + ' MB). Review below.';
-          status.style.color = '#22c55e';
+          status.style.color = 'var(--color-success)';
 
           pendingRecordingFile = new File([blob], 'screen-recording.webm', { type: blob.type });
 
@@ -995,7 +995,7 @@ pageRoutes.get(
         document.getElementById('start-capture-btn').style.display = 'none';
         document.getElementById('stop-capture-btn').style.display = '';
         status.textContent = 'Recording...';
-        status.style.color = '#f7931a';
+        status.style.color = 'var(--color-accent)';
 
         // Timer
         captureStartTime = Date.now();
@@ -1011,8 +1011,8 @@ pageRoutes.get(
         if (err.name === 'NotAllowedError' || err.name === 'AbortError') {
           status.textContent = 'Capture cancelled.';
         } else {
-          status.textContent = 'Error: ' + err.message;
-          status.style.color = '#e53e3e';
+            status.textContent = 'Error: ' + err.message;
+            status.style.color = 'var(--color-danger)';
         }
       });
     }
@@ -1042,7 +1042,7 @@ pageRoutes.get(
       document.getElementById('capture-preview').style.display = 'none';
       var status = document.getElementById('capture-status');
       status.textContent = 'Discarded. Ready to record again.';
-      status.style.color = '#888';
+      status.style.color = 'var(--color-text-faint)';
       document.getElementById('start-capture-btn').disabled = false;
     }
 
