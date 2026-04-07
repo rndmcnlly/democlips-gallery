@@ -12,6 +12,31 @@ import { streamAPI, initiateStreamUpload, createLiveInput, deleteLiveInput } fro
 
 export const uploadKeyRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
+// ─── CORS for upload key endpoints ──────────────────────────────
+//
+// Upload keys are used cross-origin (e.g. from student game pages via
+// the demo-clip-recorder script). This middleware adds CORS headers to
+// every /k/* response and handles OPTIONS preflight automatically.
+// Must be registered before route handlers so Hono runs it first.
+
+uploadKeyRoutes.use("/k/*", async (c, next) => {
+  if (c.req.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Upload-Length, Upload-Metadata, Tus-Resumable",
+        "Access-Control-Expose-Headers": "Location, Tus-Resumable",
+        "Access-Control-Max-Age": "86400",
+      },
+    });
+  }
+  await next();
+  c.res.headers.set("Access-Control-Allow-Origin", "*");
+  c.res.headers.set("Access-Control-Expose-Headers", "Location, Tus-Resumable");
+});
+
 /**
  * Verify an upload key JWT and return the claims. Rejects expired or
  * malformed tokens, and tokens that aren't upload keys (e.g. session JWTs).
@@ -99,8 +124,6 @@ uploadKeyRoutes.post("/k/:key", async (c) => {
       headers: {
         "Tus-Resumable": "1.0.0",
         Location: result.location,
-        "Access-Control-Expose-Headers": "Location, Tus-Resumable",
-        "Access-Control-Allow-Origin": "*",
       },
     });
   }
@@ -217,28 +240,4 @@ uploadKeyRoutes.post("/k/:key/stream", async (c) => {
   });
 });
 
-// CORS preflight for upload key endpoints
-uploadKeyRoutes.options("/k/:key", (c) => {
-  return new Response(null, {
-    status: 204,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Upload-Length, Upload-Metadata, Tus-Resumable",
-      "Access-Control-Expose-Headers": "Location, Tus-Resumable",
-      "Access-Control-Max-Age": "86400",
-    },
-  });
-});
 
-uploadKeyRoutes.options("/k/:key/stream", (c) => {
-  return new Response(null, {
-    status: 204,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-      "Access-Control-Max-Age": "86400",
-    },
-  });
-});

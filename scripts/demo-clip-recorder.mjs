@@ -1,15 +1,19 @@
 // Demo Clip Recorder -- scripts.democlips.dev
 //
 // Records a specific page element using getDisplayMedia + CropTarget.
-// Saves a .webm file locally for upload to DemoClips.
+// Saves a .webm file locally, or uploads directly to a DemoClips gallery
+// if data-upload-url is provided.
 //
 // Usage:
 //   <script type="module"
 //           src="https://scripts.democlips.dev/demo-clip-recorder.mjs"
-//           data-clip-root="YOUR_ELEMENT_ID"></script>
+//           data-clip-root="YOUR_ELEMENT_ID"
+//           data-upload-url="https://gallery.democlips.dev/k/TOKEN"></script>
 //
 // Attributes:
 //   data-clip-root    (required) id of the element to record
+//   data-upload-url   (optional) upload key URL; POST the recording here
+//                     instead of saving locally
 
 // ── Read configuration from the script tag ──────────────────────
 //
@@ -21,6 +25,7 @@ if (!scriptEl) {
   console.error("Demo Clip Recorder: could not find own <script> element.");
 }
 const clipRootId = (scriptEl?.dataset.clipRoot || "").trim();
+const uploadUrl = (scriptEl?.dataset.uploadUrl || "").trim();
 
 // ── Recording state ─────────────────────────────────────────────
 
@@ -84,11 +89,60 @@ async function getStream() {
 
 function saveRecording() {
   const blob = new Blob(recordedChunks, { type: "video/webm" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "demo-clip.webm";
-  a.click();
+  if (uploadUrl) {
+    uploadRecording(blob);
+  } else {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "demo-clip.webm";
+    a.click();
+  }
+}
+
+async function uploadRecording(blob) {
+  const d = styledDialog();
+
+  const status = document.createElement("p");
+  status.style.margin = "0";
+  status.textContent = "Uploading recording...";
+  d.box.appendChild(status);
+
+  d.dialog.showModal();
+
+  try {
+    const res = await fetch(uploadUrl, {
+      method: "POST",
+      headers: { "Content-Type": "video/webm" },
+      body: blob,
+    });
+
+    if (!res.ok) {
+      let msg = `Server returned ${res.status}`;
+      try {
+        const data = await res.json();
+        if (data.error) msg = data.error;
+      } catch { /* ignore parse errors */ }
+      throw new Error(msg);
+    }
+
+    status.textContent = "Upload complete!";
+    status.style.color = "#7bed9f";
+  } catch (err) {
+    status.textContent = `Upload failed: ${err.message}`;
+    status.style.color = "#ff6b6b";
+  }
+
+  const saveLocal = () => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "demo-clip.webm";
+    a.click();
+  };
+
+  d.box.appendChild(makeButton("Save file locally", () => { saveLocal(); }));
+  d.box.appendChild(makeButton("Close", () => d.dialog.close()));
 }
 
 // ── Shared dialog helpers (continued) ────────────────────────────
@@ -204,10 +258,13 @@ function recordingDialog() {
 
   const p = document.createElement("p");
   p.style.margin = "0 0 16px";
+  const destination = uploadUrl
+    ? "uploaded to the gallery"
+    : "saved as a local file";
   p.innerHTML = `Ready to record
     <code style="${CODE_STYLE}">#${clipRootId}</code>.
     Your browser will ask you to share your screen. The recording
-    will be cropped to just that element.`;
+    will be cropped to just that element and ${destination}.`;
   d.box.appendChild(p);
 
   const btnDiv = document.createElement("div");
