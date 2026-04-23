@@ -81,7 +81,10 @@ async function getStream() {
     audio: true,
   });
   const videoTrack = stream.getVideoTracks()[0];
-  const target = document.getElementById(clipRootId);
+  let target = document.getElementById(clipRootId);
+  while(target.childElementCount == 1) {
+    target = target.firstChild;
+  }
   const cropTarget = await CropTarget.fromElement(target);
   await videoTrack.cropTo(cropTarget);
   return stream;
