@@ -6,7 +6,7 @@
 import { Hono } from "hono";
 import { Bindings, Variables, isModerator } from "./types";
 import { requireAuth } from "./auth";
-import { streamAPI, initiateStreamUpload } from "./stream";
+import { streamAPI, initiateStreamUpload, enableStreamDownload } from "./stream";
 
 export const apiRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -187,6 +187,43 @@ apiRoutes.post("/update-video", requireAuth, async (c) => {
     .run();
 
   return c.json({ ok: true });
+});
+
+/**
+ * Enable / check MP4 download for a video.
+ *
+ * Any authenticated @ucsc.edu user can trigger this for any non-hidden clip
+ * (moderators can also for hidden clips), matching the visibility rules on
+ * the /v/{id} page. The first call asks Cloudflare Stream to transcode;
+ * subsequent calls return the current status. The client polls until the
+ * status is "ready", then navigates to the returned URL (which points
+ * directly at Stream, not the Worker).
+ */
+apiRoutes.post("/download-video", requireAuth, async (c) => {
+  const user = c.var.user!;
+  const { videoId } = await c.req.json<{ videoId: string }>();
+
+  if (!videoId) return c.json({ error: "Missing videoId" }, 400);
+
+  const moderator = isModerator(c.env, user);
+
+  const row = await c.env.DB.prepare(
+    "SELECT id, hidden FROM videos WHERE id = ? AND (hidden = 0 OR ?)"
+  )
+    .bind(videoId, moderator ? 1 : 0)
+    .first<{ id: string; hidden: number }>();
+
+  if (!row) return c.json({ error: "Video not found" }, 404);
+
+  const status = await enableStreamDownload(c.env, videoId);
+  if (!status) {
+    return c.json(
+      { error: "Could not enable download. The video may still be processing." },
+      503
+    );
+  }
+
+  return c.json(status);
 });
 
 // CORS preflight for TUS (tus-js-client sends OPTIONS + special headers)

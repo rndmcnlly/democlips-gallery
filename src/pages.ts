@@ -322,6 +322,11 @@ pageRoutes.get("/v/:videoId{[0-9a-fA-F-]+}", requireAuth, async (c) => {
   const deleteBtn = isOwner
     ? `<button class="delete-btn" onclick="deleteVideo(event, '${esc(video.id)}')" title="Delete your clip" style="font-size:0.85rem; padding:4px 10px;">delete</button>`
     : "";
+  // Only offer download once the video has finished processing (has a duration).
+  // MP4 transcoding happens on-demand the first time someone clicks.
+  const downloadBtn = video.duration
+    ? `<button class="delete-btn" id="download-btn" onclick="downloadVideo(event, '${esc(video.id)}')" title="Download as MP4" style="font-size:0.85rem; padding:4px 10px; margin-right:0.25rem;">download</button>`
+    : "";
 
   const urlDisplay = video.url ? video.url.replace(/^https?:\/\//, "").slice(0, 60) : "";
   const urlEllipsis = video.url && video.url.replace(/^https?:\/\//, "").length > 60 ? "..." : "";
@@ -351,6 +356,7 @@ pageRoutes.get("/v/:videoId{[0-9a-fA-F-]+}", requireAuth, async (c) => {
         </div>
         <div style="display:flex; align-items:center; gap:0.5rem;">
           ${starBtn}
+          ${downloadBtn}
           ${editBtn}
           ${deleteBtn}
         </div>
@@ -398,6 +404,58 @@ pageRoutes.get("/v/:videoId{[0-9a-fA-F-]+}", requireAuth, async (c) => {
       } catch (err) {
         alert('Error: ' + err.message);
       } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // Cloudflare's ?filename= param only accepts [A-Za-z0-9-_] (ext added automatically).
+    // Build a friendly filename from the title, falling back to the video ID.
+    function buildDownloadFilename(title, videoId) {
+      var base = (title || '').trim();
+      if (!base) base = 'clip-' + videoId;
+      base = base.replace(/[^A-Za-z0-9-_]+/g, '-').replace(/^-+|-+$/g, '');
+      if (!base) base = 'clip-' + videoId;
+      return base.slice(0, 80);
+    }
+
+    async function downloadVideo(e, videoId) {
+      e.stopPropagation();
+      var btn = e.currentTarget;
+      var origLabel = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'preparing...';
+
+      var title = ${JSON.stringify(video.title || "").replace(/</g, "\\u003c")};
+
+      try {
+        // Poll until Stream reports the MP4 is ready. Each call is a cheap
+        // POST to our API that proxies Stream's /downloads endpoint (idempotent).
+        var maxAttempts = 30;  // ~60s worst case
+        for (var i = 0; i < maxAttempts; i++) {
+          var res = await fetch('/api/download-video', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ videoId: videoId }),
+          });
+          var data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Download failed');
+
+          if (data.status === 'ready') {
+            var filename = buildDownloadFilename(title, videoId);
+            window.location.href = data.url + '?filename=' + encodeURIComponent(filename);
+            btn.textContent = origLabel;
+            btn.disabled = false;
+            return;
+          }
+
+          var pct = Math.round(data.percentComplete || 0);
+          btn.textContent = 'preparing ' + pct + '%';
+          await new Promise(function(r) { setTimeout(r, 2000); });
+        }
+        throw new Error('Download is taking longer than expected. Try again in a minute.');
+      } catch (err) {
+        alert('Error: ' + err.message);
+        btn.textContent = origLabel;
         btn.disabled = false;
       }
     }

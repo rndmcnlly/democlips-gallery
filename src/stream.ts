@@ -48,6 +48,36 @@ export async function refreshVideoStatus(
   return updates;
 }
 
+// ─── MP4 Downloads ──────────────────────────────────────────────
+
+/** Status of a generated MP4 download for a video. */
+export type StreamDownloadStatus = {
+  status: "inprogress" | "ready";
+  url: string;
+  percentComplete: number;
+};
+
+/**
+ * Enable (or query) MP4 download for a video.
+ *
+ * Cloudflare Stream requires per-video opt-in for MP4 downloads: the first
+ * POST kicks off transcoding, subsequent POSTs (and GETs) return the current
+ * status. We just POST every time and treat the endpoint as idempotent.
+ *
+ * Returns null if the Stream API call failed (e.g. video not ready yet,
+ * or network error). Callers should treat null as a transient failure.
+ */
+export async function enableStreamDownload(
+  env: Bindings,
+  videoId: string
+): Promise<StreamDownloadStatus | null> {
+  const data = await streamAPI(env, `/${videoId}/downloads`, "POST");
+  if (data?.success && data.result?.default) {
+    return data.result.default as StreamDownloadStatus;
+  }
+  return null;
+}
+
 // ─── Stream Live (OBS) ──────────────────────────────────────────
 
 /** Response shape from the Cloudflare Stream Live Input API. */
